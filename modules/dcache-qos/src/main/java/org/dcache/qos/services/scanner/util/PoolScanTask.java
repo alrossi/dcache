@@ -60,6 +60,7 @@ documents or software obtained from this server.
 package org.dcache.qos.services.scanner.util;
 
 import java.util.concurrent.Future;
+
 import org.dcache.pool.classic.Cancellable;
 import org.dcache.qos.data.QoSMessageType;
 import org.dcache.qos.services.scanner.data.PoolScanSummary;

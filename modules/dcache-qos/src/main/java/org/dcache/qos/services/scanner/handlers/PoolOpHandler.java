@@ -60,6 +60,7 @@ documents or software obtained from this server.
 package org.dcache.qos.services.scanner.handlers;
 
 import java.util.concurrent.ExecutorService;
+
 import org.dcache.qos.data.PoolQoSStatus;
 import org.dcache.qos.services.scanner.data.PoolScanSummary;
 
@@ -72,8 +73,8 @@ public interface PoolOpHandler {
      */
     ExecutorService getTaskService();
 
-  /**
-   * Called in response to an admin command to re-include the pool in
+    /**
+     * Called in response to an admin command to re-include the pool in
      * status changes and scanning.
      *
      * @param pool to include.

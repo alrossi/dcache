@@ -60,19 +60,23 @@ documents or software obtained from this server.
 package org.dcache.qos.util;
 
 import com.google.common.annotations.VisibleForTesting;
-import diskCacheV111.poolManager.PoolSelectionUnit;
-import dmg.cells.nucleus.CellMessageReceiver;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.util.Date;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+
+import diskCacheV111.poolManager.PoolSelectionUnit;
+
+import dmg.cells.nucleus.CellMessageReceiver;
+
 import org.dcache.alarms.AlarmMarkerFactory;
 import org.dcache.alarms.PredefinedAlarm;
 import org.dcache.poolmanager.PoolMonitor;
 import org.dcache.poolmanager.SerializablePoolMonitor;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  *  Parent class to handlers which need to run diffs and updates based on pool monitor

@@ -61,6 +61,12 @@ package org.dcache.qos.services.scanner.handlers;
 
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Sets;
+
+import java.util.Collection;
+import java.util.Map.Entry;
+import java.util.Set;
+import java.util.stream.Collectors;
+
 import diskCacheV111.poolManager.PoolSelectionUnit;
 import diskCacheV111.poolManager.PoolSelectionUnit.SelectionPool;
 import diskCacheV111.poolManager.PoolSelectionUnit.SelectionPoolGroup;
@@ -68,10 +74,6 @@ import diskCacheV111.poolManager.PoolSelectionUnit.SelectionUnit;
 import diskCacheV111.poolManager.StorageUnit;
 import diskCacheV111.poolManager.StorageUnitInfoExtractor;
 import diskCacheV111.pools.PoolV2Mode;
-import java.util.Collection;
-import java.util.Map.Entry;
-import java.util.Set;
-import java.util.stream.Collectors;
 import org.dcache.poolmanager.PoolMonitor;
 import org.dcache.qos.data.PoolQoSStatus;
 import org.dcache.qos.services.scanner.data.PoolFilter;

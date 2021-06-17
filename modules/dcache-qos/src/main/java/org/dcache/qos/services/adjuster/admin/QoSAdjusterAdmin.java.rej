@@ -1,0 +1,17 @@
+***************
+*** 88,94 ****
+      protected QoSAction action;
+  
+      @Option(name = "state",
+-         valueSpec = "INITIALIZED|RUNNING|CANCELLED|DONE",
+          separator = ",",
+          usage = "Match only operations for files matching this comma-delimited set of states; "
+              + "default is RUNNING.")
+--- 88,94 ----
+      protected QoSAction action;
+  
+      @Option(name = "state",
++         valueSpec = "INITIALIZED|RUNNING|WAITING|CANCELLED|DONE",
+          separator = ",",
+          usage = "Match only operations for files matching this comma-delimited set of states; "
+              + "default is RUNNING.")

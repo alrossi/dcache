@@ -60,12 +60,13 @@ documents or software obtained from this server.
 package org.dcache.qos.services.scanner.data;
 
 import diskCacheV111.util.CacheException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import org.dcache.qos.data.FileQoSUpdate;
 import org.dcache.qos.data.PoolQoSStatus;
 import org.dcache.qos.services.scanner.util.PoolScanTask;
 import org.dcache.qos.util.ExceptionMessage;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  *  Object stored in the pool operation map.

@@ -61,14 +61,15 @@ package org.dcache.qos.services.scanner.handlers;
 
 import diskCacheV111.util.CacheException;
 import java.util.concurrent.ExecutorService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import org.dcache.qos.QoSException;
 import org.dcache.qos.data.PoolQoSStatus;
 import org.dcache.qos.listeners.QoSPoolScanResponseListener;
 import org.dcache.qos.listeners.QoSVerificationListener;
 import org.dcache.qos.services.scanner.data.PoolScanSummary;
 import org.dcache.qos.services.scanner.namespace.NamespaceAccess;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  *  Dispatches to the namespace the scan summary request and calls complete when if terminates.

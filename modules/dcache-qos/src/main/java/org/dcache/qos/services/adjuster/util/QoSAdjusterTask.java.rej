@@ -1,0 +1,65 @@
+***************
+*** 104,110 ****
+    private long endTime;
+  
+    enum Status {
+-     INITIALIZED, RUNNING, CANCELLED, DONE
+    }
+  
+    private Status status;
+--- 104,110 ----
+    private long endTime;
+  
+    enum Status {
++     INITIALIZED, RUNNING, WAITING, CANCELLED, DONE
+    }
+  
+    private Status status;
+***************
+*** 239,248 ****
+      return status == Status.RUNNING;
+    }
+  
+    public synchronized boolean isDone() {
+      return status == Status.DONE || status == Status.CANCELLED;
+    }
+  
+    public void relayMessage(PoolMigrationCopyFinishedMessage message) {
+      if (!message.getPnfsId().equals(pnfsId)) {
+        return;
+--- 239,254 ----
+      return status == Status.RUNNING;
+    }
+  
++   public synchronized boolean isWaiting() { return status == Status.WAITING; }
++ 
+    public synchronized boolean isDone() {
+      return status == Status.DONE || status == Status.CANCELLED;
+    }
+  
++   public synchronized void poll() {
++     adjuster.poll();
++   }
++ 
+    public void relayMessage(PoolMigrationCopyFinishedMessage message) {
+      if (!message.getPnfsId().equals(pnfsId)) {
+        return;
+***************
+*** 261,266 ****
+      this.future = future;
+    }
+  
+    public synchronized void taskTerminated(Optional<String> target, Exception exception) {
+      if (target.isPresent()) {
+        this.target = target.get();
+--- 267,276 ----
+      this.future = future;
+    }
+  
++   public synchronized void setToWaiting() {
++     status = Status.WAITING;
++   }
++ 
+    public synchronized void taskTerminated(Optional<String> target, Exception exception) {
+      if (target.isPresent()) {
+        this.target = target.get();
