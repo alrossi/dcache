@@ -63,11 +63,14 @@ import org.dcache.cells.CellStub;
 import org.dcache.qos.data.QoSMessageType;
 import org.dcache.qos.listeners.QoSPoolScanResponseListener;
 import org.dcache.qos.vehicles.QoSScannerVerificationResponseMessage;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  *  Use this client when communicating with a remote scanner service.
  */
 public final class RemoteQoSScannerClient implements QoSPoolScanResponseListener {
+  private static final Logger LOGGER = LoggerFactory.getLogger(RemoteQoSScannerClient.class);
   private CellStub scannerService;
 
   @Override

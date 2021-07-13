@@ -70,13 +70,14 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.LinkedBlockingDeque;
-import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.function.Consumer;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import javax.annotation.concurrent.GuardedBy;
@@ -98,6 +99,8 @@ public final class QoSAdjusterTaskMap extends RunnableModule implements CellInfo
     private static final Logger LOGGER = LoggerFactory.getLogger(QoSAdjusterTaskMap.class);
     private static final String MISSING_ENTRY = "Entry for {} was removed from map before "
         + "completion of outstanding task.";
+    private static final Consumer<CacheException> ERROR_HANDLER = e
+        -> LOGGER.error("Error during fire and forget:", e);
 
     private final ReadWriteLock lock   = new ReentrantReadWriteLock(true);
     private final Lock          write  = lock.writeLock();
@@ -113,7 +116,7 @@ public final class QoSAdjusterTaskMap extends RunnableModule implements CellInfo
     private QoSAdjusterCounters counters;
     private QoSHistory history;
 
-    private ScheduledExecutorService executorService;
+    private ExecutorService executorService;
 
     /*
      *  A callback.  Note that this creates a cyclical dependency in the spring context.
@@ -381,7 +384,7 @@ public final class QoSAdjusterTaskMap extends RunnableModule implements CellInfo
         this.factory = factory;
     }
 
-    public void setExecutorService(ScheduledExecutorService executorService) {
+    public void setExecutorService(ExecutorService executorService) {
         this.executorService = executorService;
     }
 
@@ -531,6 +534,7 @@ public final class QoSAdjusterTaskMap extends RunnableModule implements CellInfo
     }
 
     private void submit(QoSAdjusterTask task) {
+        task.setErrorHandler(ERROR_HANDLER);
         task.setFuture(executorService.submit(task.toFireAndForgetTask()));
     }
 }

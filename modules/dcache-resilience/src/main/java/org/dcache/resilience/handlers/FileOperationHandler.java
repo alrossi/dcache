@@ -160,7 +160,7 @@ public class FileOperationHandler implements CellMessageSender {
          */
         if (LIMITER.tryAcquire()) {
             LOGGER.warn(AlarmMarkerFactory.getMarker(
-                            PredefinedAlarm.RESILIENCE_LOC_SYNC_ISSUE,
+                            PredefinedAlarm.POOL_LOCATION_SYNC_ISSUE,
                             Instant.now().truncatedTo(ChronoUnit.HOURS).toString()),
                          INCONSISTENT_LOCATIONS_ALARM);
         }

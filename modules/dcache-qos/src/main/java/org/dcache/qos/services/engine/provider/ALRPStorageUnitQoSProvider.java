@@ -268,7 +268,17 @@ public class ALRPStorageUnitQoSProvider implements QoSRequirementsProvider, Cell
       return new FileQoSRequirements(pnfsId, fetchAttributes(pnfsId));
     }
 
-    FileAttributes attributes = validateAttributes(update);
+    FileAttributes attributes;
+    try {
+        attributes = validateAttributes(update);
+    } catch (QoSException e) {
+        if (update.getMessageType() == CLEAR_CACHE_LOCATION) {
+          attributes = null;
+        } else {
+          throw e;
+        }
+    }
+
     if (attributes == null) {
       return null;
     }

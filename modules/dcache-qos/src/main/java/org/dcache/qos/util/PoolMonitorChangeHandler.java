@@ -60,19 +60,23 @@ documents or software obtained from this server.
 package org.dcache.qos.util;
 
 import com.google.common.annotations.VisibleForTesting;
-import diskCacheV111.poolManager.PoolSelectionUnit;
-import dmg.cells.nucleus.CellMessageReceiver;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.util.Date;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+
+import diskCacheV111.poolManager.PoolSelectionUnit;
+
+import dmg.cells.nucleus.CellMessageReceiver;
+
 import org.dcache.alarms.AlarmMarkerFactory;
 import org.dcache.alarms.PredefinedAlarm;
 import org.dcache.poolmanager.PoolMonitor;
 import org.dcache.poolmanager.SerializablePoolMonitor;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  *  Parent class to handlers which need to run diffs and updates based on pool monitor
@@ -86,7 +90,7 @@ public abstract class PoolMonitorChangeHandler<D, I extends MapInitializer>
     protected static final Logger ACTIVITY_LOGGER = LoggerFactory.getLogger("org.dcache.qos-log");
 
     private static final String SYNC_ALARM = "Last pool monitor refresh was at %s, elapsed time is "
-                                                + "greater than %s %s; resilience is "
+                                                + "greater than %s %s; qos verifier is "
                                                 + "out of sync with pool monitor.";
 
     protected I initializer;
@@ -199,8 +203,8 @@ public abstract class PoolMonitorChangeHandler<D, I extends MapInitializer>
                                              new Date(lastRefresh),
                                              refreshTimeout,
                                              refreshTimeoutUnit);
-            LOGGER.error(AlarmMarkerFactory.getMarker(PredefinedAlarm.RESILIENCE_PM_SYNC_FAILURE,
-                                            "resilience", String.valueOf(lastRefresh)),
+            LOGGER.error(AlarmMarkerFactory.getMarker(PredefinedAlarm.POOLMANAGER_SYNC_FAILURE,
+                                            "qos", String.valueOf(lastRefresh)),
                          initError);
         }
     }

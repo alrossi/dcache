@@ -76,7 +76,6 @@ public final class FileQoSRequirements implements Serializable {
   /*
    *  The actual QoS requirements for the file.
    */
-  private String requiredPoolGroup;
   private int requiredDisk;
   private int requiredTape;
   private Set<String> partitionKeys;
@@ -118,17 +117,9 @@ public final class FileQoSRequirements implements Serializable {
     this.requiredTape = requiredTape;
   }
 
-  public String getRequiredPoolGroup() {
-    return requiredPoolGroup;
-  }
-
-  public void setRequiredPoolGroup(String requiredPoolGroup) {
-    this.requiredPoolGroup = requiredPoolGroup;
-  }
-
   @Override
   public String toString() {
-    return String.format("(%s)(requiredDisk %s)(requiredTape %s)(requiredGroup %s)(partitionKeys %s)",
-        pnfsId, requiredDisk, requiredTape, requiredPoolGroup, partitionKeys);
+    return String.format("(%s)(requiredDisk %s)(requiredTape %s)((partitionKeys %s)",
+        pnfsId, requiredDisk, requiredTape, partitionKeys);
   }
 }

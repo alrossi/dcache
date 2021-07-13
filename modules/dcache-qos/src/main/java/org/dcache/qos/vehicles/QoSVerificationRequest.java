@@ -60,14 +60,12 @@ documents or software obtained from this server.
 package org.dcache.qos.vehicles;
 
 import java.io.Serializable;
-import org.dcache.qos.data.FileQoSRequirements;
 import org.dcache.qos.data.FileQoSUpdate;
 
 public class QoSVerificationRequest implements Serializable {
   private static final long serialVersionUID = 1028638405680174965L;
 
   private FileQoSUpdate update;
-  private FileQoSRequirements requirements;
 
   public FileQoSUpdate getUpdate() {
     return update;
@@ -75,13 +73,5 @@ public class QoSVerificationRequest implements Serializable {
 
   public void setUpdate(FileQoSUpdate update) {
     this.update = update;
-  }
-
-  public FileQoSRequirements getRequirements() {
-    return requirements;
-  }
-
-  public void setRequirements(FileQoSRequirements requirements) {
-    this.requirements = requirements;
   }
 }

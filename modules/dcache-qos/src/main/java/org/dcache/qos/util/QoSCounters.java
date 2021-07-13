@@ -89,7 +89,8 @@ public abstract class QoSCounters {
       .ofPattern("yyyy/MM/dd-HH:mm:ss")
       .withZone(ZoneId.systemDefault());
   protected static final DateTimeFormatter SUFFIX_FORMATTER = DateTimeFormatter
-      .ofPattern("yyyy_MM_dd_HH");
+      .ofPattern("yyyy_MM_dd_HH")
+      .withZone(ZoneId.systemDefault());
 
   protected static final String LASTSTART = "Running since: %s\n";
   protected static final String UPTIME    = "Uptime %s days, %s hours, %s minutes, %s seconds\n\n";
@@ -181,7 +182,8 @@ public abstract class QoSCounters {
   }
 
   public void appendRunning(StringBuilder builder) {
-    long elapsed = (System.currentTimeMillis() - started.getTime()) / 1000;
+    long elapsed
+        = TimeUnit.MILLISECONDS.toSeconds(System.currentTimeMillis() - started.getTime());
     builder.append(String.format(LASTSTART, started));
     appendDHMSElapsedTime(elapsed, UPTIME, builder);
   }

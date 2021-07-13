@@ -70,7 +70,7 @@ import static java.util.Objects.requireNonNull;
  *  RuntimeExceptions.
  */
 public abstract class ErrorAwareTask implements Runnable {
-    protected Consumer<CacheException> errorHandler = (e) -> {};
+    protected Consumer<CacheException> errorHandler = e -> {};
 
     public void setErrorHandler(Consumer<CacheException> handler) {
         errorHandler = requireNonNull(handler);
@@ -82,7 +82,7 @@ public abstract class ErrorAwareTask implements Runnable {
                 run();
             } catch (RuntimeException e) {
                 errorHandler.accept(new CacheException(CacheException.UNEXPECTED_SYSTEM_EXCEPTION,
-                                                       "Bug detected: " + e.toString(), e));
+                                                       "Bug detected: " + e, e));
                 throw e;
             }
         });

@@ -87,8 +87,6 @@ public final class FileQoSUpdate implements Serializable {
   private String storageUnit;
   private boolean forced;
 
-  private long   size;
-
   public FileQoSUpdate(PnfsId pnfsId, String pool, QoSMessageType type) {
     this.pnfsId = pnfsId;
     this.pool = pool;
@@ -144,13 +142,5 @@ public final class FileQoSUpdate implements Serializable {
 
   public void setEffectivePoolGroup(String effectivePoolGroup) {
     this.effectivePoolGroup = effectivePoolGroup;
-  }
-
-  public long getSize() {
-    return size;
-  }
-
-  public void setSize(long size) {
-    this.size = size;
   }
 }

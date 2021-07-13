@@ -222,15 +222,14 @@ public final class FileQoSStatusHandler implements CellInfoProvider, QoSActionCo
 
   @Override
   public void fileQoSActionCompleted(PnfsId pnfsId, QoSAction action, Serializable error) {
+    LOGGER.debug("fileQoSActionCompleted {}, {}. {}.", pnfsId, action, error);
     counters.increment(QOS_ACTION_COMPLETED);
     qosTransitionTopic.notify(new QoSTransitionCompletedMessage(pnfsId, action, error));
   }
 
   private void fileQoSStatusChanged(FileQoSUpdate update) throws QoSException {
-    FileQoSRequirements requirements = requirementsListener.fileQoSRequirementsRequested(update);
     QoSVerificationRequest request = new QoSVerificationRequest();
     request.setUpdate(update);
-    request.setRequirements(requirements);
     verificationListener.fileQoSVerificationRequested(request);
   }
 }

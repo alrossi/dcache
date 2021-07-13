@@ -59,22 +59,27 @@ documents or software obtained from this server.
  */
 package org.dcache.qos.util;
 
+import com.google.common.base.Throwables;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.concurrent.Callable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  *  Base command class for the admin interfaces.  Will notify when the service is not initialized.
  */
 public abstract class InitializerAwareCommand implements Callable<String> {
+  protected static final Logger LOGGER = LoggerFactory.getLogger(InitializerAwareCommand.class);
+
   protected static final String FORMAT_STRING = "yyyy/MM/dd-HH:mm:ss";
 
   protected static final String REQUIRE_LIMIT =
       "The current table contains %s entries; listing them all "
           + "could cause an out-of-memory error and "
-          + "cause the resilience system to fail and/or "
-          + "restarts; if you wish to proceed "
+          + "cause the domain to fail and/or "
+          + "restart; if you wish to proceed "
           + "with this listing, reissue the command "
           + "with the explicit option '-limit=%s'";
 
@@ -89,7 +94,7 @@ public abstract class InitializerAwareCommand implements Callable<String> {
   protected static final DateTimeFormatter DATE_FORMATTER
       = DateTimeFormatter.ofPattern(FORMAT_STRING).withZone(ZoneId.systemDefault());
 
-  protected static Long getTimestamp(String datetime) {
+  public static Long getTimestamp(String datetime) {
     if (datetime == null) {
       return null;
     }
@@ -119,7 +124,6 @@ public abstract class InitializerAwareCommand implements Callable<String> {
   @Override
   public String call() {
     String error = initializer.getInitError();
-
     if (error != null) {
       return error;
     }
@@ -131,7 +135,8 @@ public abstract class InitializerAwareCommand implements Callable<String> {
     try {
       return doCall();
     } catch (Exception e) {
-      return new ExceptionMessage(e).toString();
+      Throwables.throwIfUnchecked(e);
+      return e.toString();
     }
   }
 

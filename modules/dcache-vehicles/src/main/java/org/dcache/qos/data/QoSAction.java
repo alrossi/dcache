@@ -73,7 +73,7 @@ package org.dcache.qos.data;
  *   <tr><td>NOTIFY_MISSING<td></td>the file has no known locations</td></tr>
  *   <tr><td>NOTIFY_INACCESSIBLE<td></td>the file is currently unreadable everywhere</td></tr>
  *   <tr><td>NOTIFY_OUT_OF_SYNC<td></td>the locations in namespace and pools do not correspond</td></tr>
- *   <tr><td>MISCONFIGURED_POOL_GROUP<td></td>there are not enough available pools in the required pool group</td></tr>
+ *   <tr><td>POOL_SELECTION_FAILURE<td></td>there was a problem selecting target pool(s)</td></tr>
  *   <tr><td>VOID<td></td>nothing needs to be done</td></tr>
  *   </table>
  */
@@ -87,6 +87,6 @@ public enum QoSAction {
   NOTIFY_MISSING,             // the file has no known locations
   NOTIFY_INACCESSIBLE,        // the file is currently unreadable everywhere
   NOTIFY_OUT_OF_SYNC,         // the locations in namespace and pools do not correspond
-  MISCONFIGURED_POOL_GROUP,   // there are not enough available pools in the required pool group
+  POOL_SELECTION_FAILURE,     // there was a problem selecting target pool(s)
   VOID                        // nothing needs to be done
 }

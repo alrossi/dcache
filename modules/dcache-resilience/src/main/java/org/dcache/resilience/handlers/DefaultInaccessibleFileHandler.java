@@ -86,7 +86,7 @@ public final class DefaultInaccessibleFileHandler extends InaccessibleFileHandle
     @Override
     protected Type handleNoLocationsForFile(FileOperation operation) {
         PnfsId pnfsId = operation.getPnfsId();
-        LOGGER.error(AlarmMarkerFactory.getMarker(PredefinedAlarm.LOST_RESILIENT_FILE,
+        LOGGER.error(AlarmMarkerFactory.getMarker(PredefinedAlarm.LOST_FILE,
                                                   pnfsId.toString()),
                      MISSING_LOCATIONS_MESSAGE, pnfsId);
         String error = String.format("%s has no locations.", pnfsId);
