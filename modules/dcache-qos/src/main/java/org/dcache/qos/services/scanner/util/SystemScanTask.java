@@ -57,19 +57,39 @@ export control laws.  Anyone downloading information from this server is
 obligated to secure any necessary Government licenses before exporting
 documents or software obtained from this server.
  */
-package org.dcache.qos.vehicles;
+package org.dcache.qos.services.scanner.util;
 
-import diskCacheV111.vehicles.Message;
+import java.util.concurrent.ExecutorService;
+import org.dcache.qos.services.scanner.data.SystemScanSummary;
+import org.dcache.qos.services.scanner.handlers.SysOpHandler;
 
-public class QoSScannerVerificationCancelledMessage extends Message {
+/**
+ *  Executes call to scan a slice of the namespace and dispatch verification requests.
+ */
+public final class SystemScanTask extends ScanTask {
+    private final SysOpHandler handler;
+    private final SystemScanSummary scan;
 
-  private final String id;
+    public SystemScanTask(String id, long from, long to, boolean full, SysOpHandler handler) {
+        this.handler = handler;
+        scan = new SystemScanSummary(id, from, to, full);
+    }
 
-  public QoSScannerVerificationCancelledMessage(String id) {
-    this.id = id;
-  }
+    @Override
+    public void run() {
+        if (!scan.isCancelled()) {
+            handler.handleSystemScan(scan);
+        }
+    }
 
-  public String getPool() {
-    return id;
-  }
+    @Override
+    public synchronized void cancel(String explanation) {
+        scan.setCancelled(true);
+        super.cancel(explanation);
+    }
+
+    @Override
+    protected ExecutorService getService() {
+        return handler.getSystemTaskService();
+    }
 }

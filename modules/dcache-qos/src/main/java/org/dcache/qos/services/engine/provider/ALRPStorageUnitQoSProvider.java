@@ -94,7 +94,7 @@ import static diskCacheV111.util.AccessLatency.NEARLINE;
 import static diskCacheV111.util.AccessLatency.ONLINE;
 import static diskCacheV111.util.RetentionPolicy.CUSTODIAL;
 import static diskCacheV111.util.RetentionPolicy.REPLICA;
-import static org.dcache.qos.data.QoSMessageType.CHECK_CUSTODIAL_ONLINE;
+import static org.dcache.qos.data.QoSMessageType.SYSTEM_SCAN;
 import static org.dcache.qos.data.QoSMessageType.CLEAR_CACHE_LOCATION;
 import static org.dcache.qos.data.QoSMessageType.QOS_MODIFIED;
 import static org.dcache.qos.data.QoSMessageType.VALIDATE_ONLY;
@@ -299,7 +299,7 @@ public class ALRPStorageUnitQoSProvider implements QoSRequirementsProvider, Cell
 
       LOGGER.debug("validateAttributes, got required attributes for {}.", pnfsId);
 
-      if (messageType == CHECK_CUSTODIAL_ONLINE || messageType == QOS_MODIFIED) {
+      if (messageType == SYSTEM_SCAN || messageType == QOS_MODIFIED) {
         /*
          *  The pool location will be undefined here.
          *  The namespace locations may be empty for QOS_MODIFIED if

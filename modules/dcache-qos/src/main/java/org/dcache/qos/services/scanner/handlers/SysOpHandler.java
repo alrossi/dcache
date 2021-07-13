@@ -57,19 +57,37 @@ export control laws.  Anyone downloading information from this server is
 obligated to secure any necessary Government licenses before exporting
 documents or software obtained from this server.
  */
-package org.dcache.qos.vehicles;
+package org.dcache.qos.services.scanner.handlers;
 
-import diskCacheV111.vehicles.Message;
+import diskCacheV111.util.CacheException;
+import java.util.concurrent.ExecutorService;
+import org.dcache.qos.services.scanner.data.SystemScanSummary;
 
-public class QoSScannerVerificationCancelledMessage extends Message {
+/**
+ * Internal interface used by map and task.
+ */
+public interface SysOpHandler {
+  /**
+   * @return service to which to submit the pool scan tasks.
+   */
+  ExecutorService getSystemTaskService();
 
-  private final String id;
+  /**
+   * @return the min and max indices for files in the database.
+   */
+  long[] getMinMaxIndices() throws CacheException;
 
-  public QoSScannerVerificationCancelledMessage(String id) {
-    this.id = id;
-  }
+  /**
+   * Called in response to an admin command to cancel the current scan.
+   *
+   * @param id of the scan.
+   */
+  void handleScanCancelled(String id);
 
-  public String getPool() {
-    return id;
-  }
+  /**
+   * Used by the scan task to initiate the scan.
+   *
+   * @param scan details as to the count and scan termination.
+   */
+  void handleSystemScan(SystemScanSummary scan);
 }

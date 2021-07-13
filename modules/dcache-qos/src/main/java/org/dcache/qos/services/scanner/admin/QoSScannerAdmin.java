@@ -61,6 +61,7 @@ package org.dcache.qos.services.scanner.admin;
 
 import com.google.common.collect.ImmutableSet;
 import diskCacheV111.util.CacheException;
+import diskCacheV111.util.PermissionDeniedCacheException;
 import dmg.cells.nucleus.CellCommandListener;
 import dmg.util.command.Argument;
 import dmg.util.command.Command;
@@ -90,12 +91,16 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import org.dcache.qos.services.scanner.data.PoolFilter;
 import org.dcache.qos.services.scanner.data.PoolOperationMap;
+import org.dcache.qos.services.scanner.data.SystemScanOperationMap;
 import org.dcache.qos.services.scanner.namespace.NamespaceAccess;
 import org.dcache.qos.services.scanner.util.QoSScannerCounters;
 import org.dcache.qos.util.ExceptionMessage;
 import org.dcache.qos.util.InitializerAwareCommand;
 import org.dcache.qos.util.MapInitializer;
 import org.dcache.qos.util.MessageGuard;
+
+import static org.dcache.qos.util.InitializerAwareCommand.SortOrder.ASC;
+import static org.dcache.qos.util.InitializerAwareCommand.SortOrder.DESC;
 
 public final class QoSScannerAdmin implements CellCommandListener {
   static final String CONTAINED_IN        = "contained-in-";
@@ -406,120 +411,6 @@ public final class QoSScannerAdmin implements CellCommandListener {
     }
   }
 
-  @Command(name = "pool ctrl",
-      hint= "control the periodic check of active pools or processing of pool state changes",
-      description = "Activates, deactivates, or resets the periodic checking of active pools; "
-          + "turns all pool operation handling on or off (start/shutdown).")
-  class PoolControlCommand extends InitializerAwareCommand {
-    @Argument(valueSpec = "ON|OFF|START|SHUTDOWN|RESET|RUN|INFO",
-        required = false,
-        usage = "off = turn scanning off; on = turn scanning on; shutdown = turn off all handling; "
-            + "start = turn on all handling; info = show status of watchdog and scan window (default); "
-            + "reset = reset properties; run = interrupt current wait and do a sweep." )
-    String arg = "INFO";
-
-    @Option(name = "window",
-        usage = "With reset mode (one of window|sweep|down|restart). Amount of time which must "
-            + "pass since the last scan of a pool for it to be scanned again.")
-    Integer window;
-
-    @Option(name = "sweep",
-        usage = "With reset mode (one of window|sweep|down|restart). How often a sweep of the pool "
-            + "operations is made.")
-    Integer sweep;
-
-    @Option(name = "down",
-        usage = "With reset mode (one of window|sweep|down|restart). Minimum grace period between "
-            + "reception of a pool down update and scan of  the given pool.")
-    Integer down;
-
-    @Option(name = "restart",
-        usage = "With reset mode (one of window|sweep|down|restart). Minimum grace period between "
-            + "reception of a pool restart update and scan of the given pool.")
-    Integer restart;
-
-    @Option(name = "unit",
-        valueSpec = "SECONDS|MINUTES|HOURS|DAYS",
-        usage = "For the sweep/window/down/restart options.")
-    TimeUnit unit;
-
-    PoolControlCommand() {
-      super(initializer);
-    }
-
-    private ControlMode mode;
-
-    @Override
-    public String call() {
-      mode = ControlMode.valueOf(arg.toUpperCase());
-      if (mode == ControlMode.START) {
-        new Thread(() -> startAll()).start();
-        return "Consumer initialization started.";
-      }
-      return super.call();
-    }
-
-    @Override
-    protected String doCall() {
-      switch (mode) {
-        case SHUTDOWN:
-          shutdownAll();
-          return "Consumer has been shutdown.";
-        case OFF:
-          if (poolOperationMap.isWatchdogOn()) {
-            poolOperationMap.setWatchdog(false);
-            return "Shut down watchdog.";
-          }
-          return "Watchdog already off.";
-        case ON:
-          if (!poolOperationMap.isWatchdogOn()) {
-            poolOperationMap.setWatchdog(true);
-            return poolOperationMap.configSettings();
-          }
-          return "Watchdog already on.";
-        case RUN:
-          if (!poolOperationMap.isWatchdogOn()) {
-            return "Watchdog is off; please turn it on first.";
-          }
-          poolOperationMap.runNow();
-          return "Forced watchdog scan.";
-        case RESET:
-          if (!poolOperationMap.isWatchdogOn()) {
-            return "Watchdog is off; please turn it on first.";
-          }
-
-          if (window != null) {
-            poolOperationMap.setRescanWindow(window);
-            if (unit != null) {
-              poolOperationMap.setRescanWindowUnit(unit);
-            }
-          } else if (sweep != null) {
-            poolOperationMap.setTimeout(sweep);
-            if (unit != null) {
-              poolOperationMap.setTimeoutUnit(unit);
-            }
-          } else if (down != null) {
-            poolOperationMap.setDownGracePeriod(down);
-            if (unit != null) {
-              poolOperationMap.setDownGracePeriodUnit(unit);
-            }
-          } else if (restart != null) {
-            poolOperationMap.setRestartGracePeriod(restart);
-            if (unit != null) {
-              poolOperationMap.setRestartGracePeriodUnit(unit);
-            }
-          }
-
-          poolOperationMap.reset();
-
-          // fall through to return info message
-        case INFO:
-        default:
-          return poolOperationMap.configSettings();
-      }
-    }
-  }
-
   @Command(name = "pool cancel",
       hint = "cancel pool operations",
       description = "Scans the pool table and cancels operations matching the filter parameters; "
@@ -557,7 +448,7 @@ public final class QoSScannerAdmin implements CellCommandListener {
     String lastScanAfter;
 
     @Argument(required = false,
-        valueSpec = "regular expression",
+        valueSpec = "regular expression for pools",
         usage = "Cancel only operations on pools matching this expression.")
     String pools;
 
@@ -596,6 +487,20 @@ public final class QoSScannerAdmin implements CellCommandListener {
         .append(" pool operations.");
 
       return sb.toString();
+    }
+  }
+
+  @Command(name = "pool details",
+      hint = "list diagnostic information concerning scan activity by pool",
+      description = "Gives statistics on the number of scans, state, files and period.")
+  class PoolDetailsCommand extends InitializerAwareCommand {
+    PoolDetailsCommand() { super(initializer); }
+
+    @Override
+    protected String doCall() throws Exception {
+      StringBuilder builder = new StringBuilder();
+      counters.appendDetails(builder);
+      return builder.toString();
     }
   }
 
@@ -679,17 +584,75 @@ public final class QoSScannerAdmin implements CellCommandListener {
     }
   }
 
-  @Command(name = "pool details",
-      hint = "list diagnostic information concerning scan activity by pool",
-      description = "Gives statistics on the number of scans, state, files and period.")
-  class PoolDetailsCommand extends InitializerAwareCommand {
-    PoolDetailsCommand() { super(initializer); }
+  @Command(name = "pool reset",
+      hint= "control the processing of pool state changes",
+      description = "resets the properties for the handling of pool state changes.")
+  class PoolControlCommand extends InitializerAwareCommand {
+    @Option(name = "max-operations",
+        usage = "Maximum number of concurrent pool operations permitted.")
+    Integer maxOperations;
+
+    @Option(name = "sweep",
+        usage = "(one of sweep|down|restart|idle). "
+            + "How often a sweep of operations is made.")
+    Integer sweep;
+
+    @Option(name = "down",
+        usage = "(one of sweep|down|restart|idle). "
+            + "Minimum grace period between reception of a pool down update and scan of the given "
+            + "pool.")
+    Integer down;
+
+    @Option(name = "restart",
+        usage = "(one of sweep|down|restart|idle). "
+            + "Minimum grace period between reception of a pool restart update and scan of "
+            + "the given pool.")
+    Integer restart;
+
+    @Option(name = "idle",
+        usage = "(one of sweep|down|restart|idle). "
+            + "Maximum time a running pool scan can wait before timing out and being preempted.")
+    Integer idle;
+
+    @Option(name = "unit",
+        valueSpec = "SECONDS|MINUTES|HOURS|DAYS",
+        usage = "For the sweep/window/down/restart/idle options.")
+    TimeUnit unit;
+
+    PoolControlCommand() {
+      super(initializer);
+    }
 
     @Override
-    protected String doCall() throws Exception {
-      StringBuilder builder = new StringBuilder();
-      counters.appendDetails(builder);
-      return builder.toString();
+    protected String doCall() {
+      if (maxOperations != null) {
+        poolOperationMap.setMaxConcurrentRunning(maxOperations);
+      }
+
+      if (sweep != null) {
+        poolOperationMap.setTimeout(sweep);
+        if (unit != null) {
+          poolOperationMap.setTimeoutUnit(unit);
+        }
+      } else if (down != null) {
+        poolOperationMap.setDownGracePeriod(down);
+        if (unit != null) {
+          poolOperationMap.setDownGracePeriodUnit(unit);
+        }
+      } else if (restart != null) {
+        poolOperationMap.setRestartGracePeriod(restart);
+        if (unit != null) {
+          poolOperationMap.setRestartGracePeriodUnit(unit);
+        }
+      } else if (idle != null) {
+        poolOperationMap.setMaxRunningIdleTime(idle);
+        if (unit != null) {
+          poolOperationMap.setMaxRunningIdleTimeUnit(unit);
+        }
+      }
+
+      poolOperationMap.reset();
+      return poolOperationMap.configSettings();
     }
   }
 
@@ -726,8 +689,9 @@ public final class QoSScannerAdmin implements CellCommandListener {
         usage = "Scan only pools whose scan update was after this date-time.")
     String lastScanAfter;
 
-    @Argument(usage = "Regular expression for pool(s) on which to conduct the adjustment "
-        + "of all files.")
+    @Argument(required = false,
+              usage = "Regular expression for pool(s) on which to conduct the adjustment "
+              + "of all files.")
     String pools;
 
     PoolScanCommand() {
@@ -736,6 +700,10 @@ public final class QoSScannerAdmin implements CellCommandListener {
 
     @Override
     protected String doCall() throws Exception {
+      if (pools == null) {
+        return "For pool scans a regular expression argument must be provided.";
+      }
+
       PoolFilter filter = new PoolFilter();
       filter.setPools(pools);
       filter.setLastScanAfter(getTimestamp(lastScanAfter));
@@ -743,7 +711,9 @@ public final class QoSScannerAdmin implements CellCommandListener {
       filter.setLastUpdateBefore(getTimestamp(lastUpdateBefore));
       filter.setLastUpdateAfter(getTimestamp(lastUpdateAfter));
       filter.setPoolStatus(status);
-      return poolOperationMap.scan(filter).getReply();
+      String message = poolOperationMap.scan(filter).getReply();
+      poolOperationMap.runNow();
+      return message;
     }
   }
 
@@ -772,8 +742,189 @@ public final class QoSScannerAdmin implements CellCommandListener {
 
       SortOrder order = SortOrder.valueOf(this.order.toUpperCase());
       StringBuilder builder = new StringBuilder();
-      counters.readStatistics(builder, 0, limit, order == SortOrder.DESC);
+      counters.readStatistics(builder, 0, limit, order == DESC);
       return builder.toString();
+    }
+  }
+
+  @Command(name = "sys cancel",
+           hint = "cancel background scan operations",
+           description = "Cancels operations matching the options; either single operation, all "
+               + "online or nearline; notifies the verifier.")
+  class SysCancelCommand extends InitializerAwareCommand {
+    SysCancelCommand() {
+      super(initializer);
+    }
+
+    @Option(name = "id",
+        usage = "Cancel the sub-operation matching this uuid.")
+    String id;
+
+    @Option(name = "nearline",
+        usage = "Cancel all nearline sub-operations.")
+    boolean nearline = false;
+
+    @Option(name = "online",
+        usage = "Cancel all online sub-operations.")
+    boolean online = false;
+
+    @Override
+    protected String doCall() {
+      if (id != null) {
+        systemScanOperationMap.cancelSystemScan(id);
+      } else {
+        if (nearline) {
+          systemScanOperationMap.cancelAll(true);
+        }
+        if (online) {
+          systemScanOperationMap.cancelAll(false);
+        }
+      }
+      return systemScanOperationMap.getSystemScanStatus();
+    }
+  }
+
+  @Command(name = "sys ls", hint= "list entries in the system scan operation table",
+      description = "The history option prints the last 100 operations; otherwise, live"
+          + " scans are reported.")
+  class SysOpLsCommand extends InitializerAwareCommand {
+    SysOpLsCommand() {
+      super(initializer);
+    }
+
+    @Option(name = "history",
+        usage = "List the last 100 completed operations.")
+    boolean history = false;
+
+    @Option(name = "order", usage = "ASC ascending DESC descending.")
+    SortOrder order = ASC;
+
+    @Override
+    protected String doCall() {
+      if (history) {
+        return order == ASC ? systemScanOperationMap.historyAscending() :
+            systemScanOperationMap.historyDescending();
+      }
+      return systemScanOperationMap.getSystemScanStatus();
+    }
+  }
+
+  @Command(name = "sys reset",
+      hint= "control the periodic check for system scans",
+      description = "Resets the properties governing system scanning, like the periodic interval,"
+          + " whether nearline is enabled, batch size, and the number of concurrent operations allowed.")
+  class SysControlCommand extends InitializerAwareCommand {
+    @Option(name = "enable-nearline",
+        usage = "Turn on or off NEARLINE (CUSTODIAL) system scanning.")
+    Boolean enableNearline;
+
+    @Option(name = "nearline-window",
+        usage = "(one of nearline-window|online-window). "
+            + "Amount of time which must pass since the last full system scan for it to be run again.")
+    Integer nearlineWindow;
+
+    @Option(name = "online-window",
+        usage = "(one of nearline-window|online-window). "
+            + "Amount of time which must pass since the last system scan (online files only) for "
+            + "it to be run again.")
+    Integer onlineWindow;
+
+    @Option(name = "online-batch-size",
+        usage = "Maximum number of pnsfids to send to the verifier at a time.")
+    Integer onlineBatch;
+
+    @Option(name = "nearline-batch-size",
+        usage = "Maximum number of pnsfids to send to the verifier at a time.")
+    Integer nearlineBatch;
+
+    @Option(name = "max-operations",
+        usage = "Maximum number of concurrent operations permitted; note that this number "
+            + "applies independently to both online and nearline scans.")
+    Integer maxOperations;
+
+    @Option(name = "unit",
+        valueSpec = "SECONDS|MINUTES|HOURS|DAYS",
+        usage = "(one of nearline-window|online-window).  Time unit to use.")
+    TimeUnit unit;
+
+    SysControlCommand() {
+      super(initializer);
+    }
+
+    @Override
+    protected String doCall() {
+      if (enableNearline != null) {
+        systemScanOperationMap.setNearlineRescanEnabled(enableNearline);
+      }
+
+      if (nearlineBatch != null) {
+        systemScanOperationMap.setNearlineBatchSize(nearlineBatch);
+      }
+
+      if (onlineBatch != null) {
+        systemScanOperationMap.setOnlineBatchSize(onlineBatch);
+      }
+
+      if (maxOperations != null) {
+        systemScanOperationMap.setMaxConcurrentRunning(maxOperations);
+      }
+
+      if (nearlineWindow != null) {
+        systemScanOperationMap.setNearlineRescanWindow(nearlineWindow);
+        if (unit != null) {
+          systemScanOperationMap.setNearlineRescanWindowUnit(unit);
+        }
+      } else if (onlineWindow != null) {
+        systemScanOperationMap.setOnlineRescanWindow(onlineWindow);
+        if (unit != null) {
+          systemScanOperationMap.setOnlineRescanWindowUnit(unit);
+        }
+      }
+
+      systemScanOperationMap.reset();
+      return  systemScanOperationMap.configSettings();
+    }
+  }
+
+  @Command(name = "sys scan",
+      hint= "initiate an ad hoc background scan.",
+      description = "If this is nearline, it will bypass the enable flag; however, if a scan of "
+          + "the requested type is already running, it will not be automatically canceled.")
+  class SysScanCommand extends InitializerAwareCommand {
+    SysScanCommand() {
+      super(initializer);
+    }
+
+    @Option(name = "nearline",
+        usage = "Scan nearline custodial files with cached replicas. "
+            + "For most deployments, NEARLINE will be the more costly scan and could run for many "
+            + "days, depending on the size of the namespace.")
+    boolean nearline = false;
+
+    @Option(name = "online",
+        usage = "Scan online files (both REPLICA and CUSTODIAL). "
+            + "Equivalent to scanning all pools for persistent files.")
+    boolean online = false;
+
+    @Override
+    protected String doCall() {
+      try {
+        if (nearline) {
+          systemScanOperationMap.startScan(true);
+        }
+
+        if (online) {
+          systemScanOperationMap.startScan(false);
+        }
+
+        if (!nearline && !online) {
+          return "No scan started; must be -online, -nearline or both.";
+        }
+      } catch (PermissionDeniedCacheException e) {
+        return e.toString();
+      }
+      systemScanOperationMap.runNow();
+      return "Scan started.";
     }
   }
 
@@ -787,6 +938,7 @@ public final class QoSScannerAdmin implements CellCommandListener {
   private MessageGuard messageGuard;
   private MapInitializer initializer;
   private PoolOperationMap poolOperationMap;
+  private SystemScanOperationMap systemScanOperationMap;
   private QoSScannerCounters counters;
   private NamespaceAccess namespaceAccess;
   private String dataDir;
@@ -818,6 +970,10 @@ public final class QoSScannerAdmin implements CellCommandListener {
 
   public void setPoolOperationMap(PoolOperationMap poolOperationMap) {
     this.poolOperationMap = poolOperationMap;
+  }
+
+  public void setSystemScanOperationMap(SystemScanOperationMap systemScanOperationMap) {
+    this.systemScanOperationMap = systemScanOperationMap;
   }
 
   private void handleAsync(String fileName,

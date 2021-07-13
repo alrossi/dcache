@@ -57,19 +57,40 @@ export control laws.  Anyone downloading information from this server is
 obligated to secure any necessary Government licenses before exporting
 documents or software obtained from this server.
  */
-package org.dcache.qos.vehicles;
+package org.dcache.qos.services.scanner.data;
 
-import diskCacheV111.vehicles.Message;
+import org.dcache.qos.services.scanner.util.ScanTask;
 
-public class QoSScannerVerificationCancelledMessage extends Message {
+abstract class ScanOperation<T extends ScanTask> {
+  protected enum ScanLabel {
+    STARTED("started"),
+    FINISHED("finished");
 
-  private final String id;
+    private String label;
 
-  public QoSScannerVerificationCancelledMessage(String id) {
-    this.id = id;
+    ScanLabel(String label) {
+      this.label = label;
+    }
+
+    public String label() {
+      return label;
+    }
   }
 
-  public String getPool() {
-    return id;
+  protected T task;
+  protected ScanLabel scanLabel;
+  protected long lastUpdate;
+  protected long lastScan;
+  protected long completed;
+  protected long failed;
+
+  protected String getFailedMessage() {
+    return failed == 0 ? "" : failed + " operations failed";
   }
+
+  protected abstract void  incrementCompleted(boolean failed);
+
+  protected abstract String getFormattedPercentDone();
+
+  protected abstract boolean isComplete();
 }

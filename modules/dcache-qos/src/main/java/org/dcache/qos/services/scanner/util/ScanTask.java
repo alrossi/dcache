@@ -57,19 +57,27 @@ export control laws.  Anyone downloading information from this server is
 obligated to secure any necessary Government licenses before exporting
 documents or software obtained from this server.
  */
-package org.dcache.qos.vehicles;
+package org.dcache.qos.services.scanner.util;
 
-import diskCacheV111.vehicles.Message;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Future;
+import org.dcache.pool.classic.Cancellable;
+import org.dcache.qos.util.ErrorAwareTask;
 
-public class QoSScannerVerificationCancelledMessage extends Message {
+public abstract class ScanTask extends ErrorAwareTask implements Cancellable {
+  private Future future;
 
-  private final String id;
-
-  public QoSScannerVerificationCancelledMessage(String id) {
-    this.id = id;
+  @Override
+  public synchronized void cancel(String explanation) {
+    if (future != null) {
+      future.cancel(true);
+      future = null;
+    }
   }
 
-  public String getPool() {
-    return id;
+  public void submit() {
+    future = getService().submit(toFireAndForgetTask());
   }
+
+  protected abstract ExecutorService getService();
 }
