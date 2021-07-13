@@ -60,6 +60,7 @@ documents or software obtained from this server.
 package org.dcache.qos.services.scanner.util;
 
 import java.time.Instant;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import org.dcache.qos.data.PoolQoSStatus;
@@ -170,6 +171,10 @@ public final class QoSScannerCounters extends QoSCounters {
     QoSPoolCounter counter = poolCounterGroup.getCounter(pool);
     update(counter, status == PoolQoSStatus.DOWN, files, forced, sincePrevious);
     counter.canceled.incrementAndGet();
+  }
+
+  public void appendSweep(StringBuilder builder) {
+    builder.append(String.format(LASTSWP, new Date(lastSweep)));
   }
 
   public void increment(String pool, PoolQoSStatus status, boolean failed,

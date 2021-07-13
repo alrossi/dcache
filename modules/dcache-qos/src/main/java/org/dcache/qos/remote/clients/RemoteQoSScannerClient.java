@@ -60,6 +60,7 @@ documents or software obtained from this server.
 package org.dcache.qos.remote.clients;
 
 import org.dcache.cells.CellStub;
+import org.dcache.qos.data.QoSMessageType;
 import org.dcache.qos.listeners.QoSPoolScanResponseListener;
 import org.dcache.qos.vehicles.QoSScannerVerificationResponseMessage;
 
@@ -70,8 +71,8 @@ public final class RemoteQoSScannerClient implements QoSPoolScanResponseListener
   private CellStub scannerService;
 
   @Override
-  public void scanRequestUpdated(String pool, int succeeded, int failed) {
-    scannerService.send(new QoSScannerVerificationResponseMessage(pool, succeeded, failed));
+  public void scanRequestUpdated(QoSMessageType type, String id, int succeeded, int failed) {
+    scannerService.send(new QoSScannerVerificationResponseMessage(type, id, succeeded, failed));
   }
 
   public void setScannerService(CellStub scannerService) {

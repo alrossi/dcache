@@ -57,19 +57,40 @@ export control laws.  Anyone downloading information from this server is
 obligated to secure any necessary Government licenses before exporting
 documents or software obtained from this server.
  */
-package org.dcache.qos.vehicles;
+package org.dcache.qos.services.scanner.data;
 
-import diskCacheV111.vehicles.Message;
+import java.io.Serializable;
 
-public class QoSScannerVerificationCancelledMessage extends Message {
+abstract class ScanSummary implements Serializable {
+  private static final long serialVersionUID = -2876513775592080147L;
 
   private final String id;
+  private long count;
+  private boolean canceled;
 
-  public QoSScannerVerificationCancelledMessage(String id) {
+  protected ScanSummary(String id) {
     this.id = id;
+    count = 0L;
+    canceled = false;
   }
 
-  public String getPool() {
+  public synchronized long getCount() {
+    return count;
+  }
+
+  public synchronized void incrementCount() {
+    ++count;
+  }
+
+  public synchronized boolean isCancelled() {
+    return canceled;
+  }
+
+  public synchronized void setCancelled(boolean canceled) {
+    this.canceled = canceled;
+  }
+
+  public String getId() {
     return id;
   }
 }

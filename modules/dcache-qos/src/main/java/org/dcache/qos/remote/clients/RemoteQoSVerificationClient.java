@@ -100,8 +100,8 @@ public final class RemoteQoSVerificationClient implements QoSVerificationListene
     verificationService.send(new QoSVerificationCancelledMessage(pnfsId));
   }
 
-  public void fileQoSBatchedVerificationCancelled(String pool) {
-    verificationService.send(new QoSScannerVerificationCancelledMessage(pool));
+  public void fileQoSBatchedVerificationCancelled(String id) {
+    verificationService.send(new QoSScannerVerificationCancelledMessage(id));
   }
 
   public void notifyLocationExclusion(String location) {

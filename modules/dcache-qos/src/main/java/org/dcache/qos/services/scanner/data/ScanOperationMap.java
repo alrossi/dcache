@@ -57,19 +57,94 @@ export control laws.  Anyone downloading information from this server is
 obligated to secure any necessary Government licenses before exporting
 documents or software obtained from this server.
  */
-package org.dcache.qos.vehicles;
+package org.dcache.qos.services.scanner.data;
 
-import diskCacheV111.vehicles.Message;
+import dmg.cells.nucleus.CellInfoProvider;
+import java.util.concurrent.locks.Condition;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
+import org.dcache.qos.services.scanner.util.QoSScannerCounters;
+import org.dcache.util.RunnableModule;
 
-public class QoSScannerVerificationCancelledMessage extends Message {
+/**
+ *  Provides common run method for the maps and several other common methods and fields.
+ */
+abstract class ScanOperationMap extends RunnableModule implements CellInfoProvider {
+  protected final Lock lock = new ReentrantLock();
+  protected final Condition condition = lock.newCondition();
 
-  private final String id;
+  protected volatile boolean resetInterrupt = false;
+  protected volatile boolean runInterrupt = false;
+  protected volatile int maxConcurrentRunning = 4;
 
-  public QoSScannerVerificationCancelledMessage(String id) {
-    this.id = id;
+  protected QoSScannerCounters counters;
+
+  public void reset() {
+    resetInterrupt = true;
+    threadInterrupt();
   }
 
-  public String getPool() {
-    return id;
+  @Override
+  public void run() {
+    while (!Thread.interrupted()) {
+      long start = System.currentTimeMillis();
+      lock.lock();
+      try {
+        condition.await(timeout, timeoutUnit);
+      } catch (InterruptedException e) {
+        if (resetInterrupt) {
+          LOGGER.trace("Pool watchdog reset, returning to wait: timeout {} {}.", timeout,
+              timeoutUnit);
+          resetInterrupt = false;
+          continue;
+        }
+        if (!runInterrupt) {
+          LOGGER.trace("Pool watchdog wait was interrupted; exiting.");
+          break;
+        }
+        runInterrupt = false;
+      } finally {
+        lock.unlock();
+      }
+
+      if (Thread.interrupted()) {
+        break;
+      }
+
+      LOGGER.trace("Pool watchdog initiating scan.");
+      runScans();
+      LOGGER.trace("Pool watchdog scan completed.");
+
+      long end = System.currentTimeMillis();
+      counters.recordSweep(end, end - start);
+    }
+
+    LOGGER.info("Exiting pool operation consumer.");
+    clear();
+
+    LOGGER.info("Pool operation queues cleared.");
   }
+
+  public void runNow() {
+    runInterrupt = true;
+    threadInterrupt();
+  }
+
+  public void setCounters(QoSScannerCounters counters) {
+    this.counters = counters;
+  }
+
+  public int getMaxConcurrentRunning() {
+    return maxConcurrentRunning;
+  }
+
+  public void setMaxConcurrentRunning(int maxConcurrentRunning) {
+    this.maxConcurrentRunning = maxConcurrentRunning;
+  }
+
+  public abstract String configSettings();
+
+  public abstract void runScans();
+
+  protected abstract void clear();
 }

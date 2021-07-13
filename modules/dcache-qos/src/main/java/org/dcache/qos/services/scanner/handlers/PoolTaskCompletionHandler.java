@@ -64,28 +64,28 @@ import org.dcache.qos.services.scanner.data.PoolOperationMap;
 import org.dcache.qos.services.scanner.data.PoolScanSummary;
 
 /**
- *  Implements the handling of pool scan task termination via pass-through to the operation map.
+ * Implements the handling of pool scan task termination via pass-through to the operation map.
  */
 public final class PoolTaskCompletionHandler {
-    private PoolOperationMap map;
+  private PoolOperationMap map;
 
-    public void childTerminated(String pool) {
-        map.update(pool,false);
-    }
+  public void childTerminated(String pool) {
+    map.update(pool, false);
+  }
 
-    public void childTerminatedWithFailure(String pool) {
-        map.update(pool, true);
-    }
+  public void childTerminatedWithFailure(String pool) {
+    map.update(pool, true);
+  }
 
-    public void setMap(PoolOperationMap map) {
-        this.map = map;
-    }
+  public void setMap(PoolOperationMap map) {
+    this.map = map;
+  }
 
-    public void taskCompleted(PoolScanSummary scan) {
-        map.update(scan.getPool(), scan.getCount());
-    }
+  public void taskCompleted(PoolScanSummary scan) {
+    map.update(scan.getId(), scan.getCount());
+  }
 
-    public void taskFailed(PoolScanSummary scan, CacheException e) {
-        map.update(scan.getPool(), scan.getCount(), e);
-    }
+  public void taskFailed(PoolScanSummary scan, CacheException e) {
+    map.update(scan.getId(), scan.getCount(), e);
+  }
 }

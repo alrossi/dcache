@@ -59,20 +59,17 @@ documents or software obtained from this server.
  */
 package org.dcache.qos.services.scanner.util;
 
-import java.util.concurrent.Future;
-import org.dcache.pool.classic.Cancellable;
+import java.util.concurrent.ExecutorService;
 import org.dcache.qos.data.QoSMessageType;
 import org.dcache.qos.services.scanner.data.PoolScanSummary;
 import org.dcache.qos.services.scanner.handlers.PoolOpHandler;
-import org.dcache.qos.util.ErrorAwareTask;
 
 /**
  *  Executes call to scan a pool and dispatch verification requests.
  */
-public final class PoolScanTask extends ErrorAwareTask implements Cancellable {
-    private final PoolOpHandler   handler;
+public final class PoolScanTask extends ScanTask {
+    private final PoolOpHandler handler;
     private final PoolScanSummary scan;
-    private       Future          future;
 
     public PoolScanTask(String pool,
                         QoSMessageType type,
@@ -80,8 +77,8 @@ public final class PoolScanTask extends ErrorAwareTask implements Cancellable {
                         String storageUnit,
                         boolean forced,
                         PoolOpHandler handler) {
-        scan = new PoolScanSummary(pool, type, group, storageUnit, forced);
         this.handler = handler;
+        scan = new PoolScanSummary(pool, type, group, storageUnit, forced);
     }
 
     @Override
@@ -94,13 +91,11 @@ public final class PoolScanTask extends ErrorAwareTask implements Cancellable {
     @Override
     public synchronized void cancel(String explanation) {
         scan.setCancelled(true);
-        if (future != null) {
-            future.cancel(true);
-            future = null;
-        }
+        super.cancel(explanation);
     }
 
-    public void submit() {
-        future = handler.getTaskService().submit(toFireAndForgetTask());
+    @Override
+    protected ExecutorService getService() {
+        return handler.getPoolTaskService();
     }
 }

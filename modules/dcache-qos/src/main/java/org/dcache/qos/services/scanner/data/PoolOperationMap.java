@@ -66,7 +66,6 @@ import diskCacheV111.poolManager.PoolSelectionUnit;
 import diskCacheV111.poolManager.PoolSelectionUnit.SelectionPool;
 import diskCacheV111.pools.PoolV2Mode;
 import diskCacheV111.util.CacheException;
-import dmg.cells.nucleus.CellInfoProvider;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileNotFoundException;
@@ -90,48 +89,41 @@ import java.util.Set;
 import java.util.TreeMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.concurrent.locks.Condition;
-import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
+import javax.annotation.concurrent.GuardedBy;
 import org.dcache.alarms.AlarmMarkerFactory;
 import org.dcache.alarms.PredefinedAlarm;
 import org.dcache.qos.data.PoolQoSStatus;
-import org.dcache.qos.data.QoSMessageType;
-import org.dcache.qos.services.scanner.data.PoolOperation.NextAction;
-import org.dcache.qos.services.scanner.data.PoolOperation.State;
+import org.dcache.qos.services.scanner.data.PoolScanOperation.NextAction;
+import org.dcache.qos.services.scanner.data.PoolScanOperation.State;
 import org.dcache.qos.services.scanner.handlers.PoolOpHandler;
 import org.dcache.qos.services.scanner.util.PoolScanTask;
 import org.dcache.qos.services.scanner.util.QoSScannerCounters;
 import org.dcache.qos.util.ExceptionMessage;
-import org.dcache.util.RunnableModule;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
  *  Maintains three queues corresponding to the IDLE, WAITING, and RUNNING
- *  pool operation states.  The runnable method periodically scans the queues, promoting tasks as
- *  slots become available, and returning pool operation placeholders to IDLE when the related
- *  scan completes.
+ *  pool operation states.  The runnable method sweeps the queues,
+ *  promoting tasks as slots become available, and returning pool operation
+ *  placeholders to IDLE when the related scan completes.
  *  <p/>
  *  When a pool status DOWN update is received, a certain grace period
  *  is observed before actually launching the associated task.
  *  <p/>
  *  Subsequent duplicate messages are handled according to a transition
- *  table (see {@link PoolOperation#getNextAction(PoolQoSStatus)}) which defines whether
+ *  table (see {@link PoolScanOperation#getNextAction(PoolQoSStatus)}) which defines whether
  *  the current operation should be kept, replaced or cancelled (see {@link #update}).
  *  <p/>
- *  The map is swept every period.  Idle pools are first checked for expired
- *  "last scan" timestamps; those eligible are promoted to the waiting queue
- *  (this is the "watchdog" component of the map). Next, the waiting queue is scanned
- *  for grace interval expiration; the eligible operations are then promoted to running,
- *  with a scan task being launched.
- *  <p/>
- *  When a scan terminates, the update of the task records whether it
+ *  When a pool scan terminates, the update of the task records whether it
  *  completed successfully, was cancelled or failed, and the task is
  *  returned to the idle queue.
  *  <p/>
- *  Map provides methods for cancellation of running pool scans, and for
+ *  Periodically scheduled scans are not done on individual pools, but are controlled by
+ *  the system scan operation map.
+ *  <p/>
+ *  Map provides methods for cancellation of running scans, and for
  *  ad hoc submission of a scan.
  *  <p/>
  *  If pools are added or removed from the Pool Selection Unit (via the
@@ -140,58 +132,33 @@ import org.slf4j.LoggerFactory;
  *  <p/>
  *  Class is not marked final for stubbing/mocking purposes.
  */
-public class PoolOperationMap extends RunnableModule implements CellInfoProvider {
+public class PoolOperationMap extends ScanOperationMap {
   private static final long INITIALIZATION_GRACE_PERIOD = TimeUnit.MINUTES.toMillis(5);
   private static final Logger LOGGER = LoggerFactory.getLogger(PoolOperationMap.class);
 
   @VisibleForTesting
-  protected final Map<String, PoolOperation> idle = new LinkedHashMap<>();
-  protected final Map<String, PoolOperation> waiting = new LinkedHashMap<>();
-  protected final Map<String, PoolOperation> running = new HashMap<>();
+  protected final Map<String, PoolScanOperation> idle = new LinkedHashMap<>();
+  protected final Map<String, PoolScanOperation> waiting = new LinkedHashMap<>();
+  protected final Map<String, PoolScanOperation> running = new HashMap<>();
 
-  class Watchdog {
-    Integer rescanWindow;
-    TimeUnit rescanWindowUnit;
-    volatile boolean running = true;
-    volatile boolean resetInterrupt = false;
-    volatile boolean runInterrupt = false;
+  private SystemScanOperationMap sysOpMap;
+  private PoolSelectionUnit currentPsu;
+  private PoolOpHandler      handler;
 
-    long getExpiry() {
-      if (!running) {
-        return Long.MAX_VALUE;
-      }
-      return rescanWindowUnit.toMillis(rescanWindow);
-    }
-  }
-
-
-
-  private final Lock lock = new ReentrantLock();
-  private final Condition condition = lock.newCondition();
-
-  private final Watchdog watchdog = new Watchdog();
+  private String excludedPoolsFile;
 
   private long initializationGracePeriod = INITIALIZATION_GRACE_PERIOD;
   private TimeUnit initializationGracePeriodUnit = TimeUnit.MINUTES;
 
-  private PoolSelectionUnit currentPsu;
-
-  /*
-   *  A callback.  Note, this creates a cyclical dependency in the spring context.
-   *  The rationale here is that the map controls the terminal logic for scan
-   *  operations on a single thread, and thus needs to notify other components (such
-   *  as the verifier) of termination.  It makes sense that only the
-   *  handler would communicate with the "outside", and that the map should
-   *  be internal to this service.
-   */
-  private PoolOpHandler      handler;
-  private QoSScannerCounters counters;
-
-  private String excludedPoolsFile;
   private int downGracePeriod;
   private TimeUnit downGracePeriodUnit;
+
   private int restartGracePeriod;
   private TimeUnit restartGracePeriodUnit;
+
+  private int maxRunningIdleTime;
+  private TimeUnit maxRunningIdleTimeUnit;
+
   private int maxConcurrentRunning;
 
   /**
@@ -229,7 +196,7 @@ public class PoolOperationMap extends RunnableModule implements CellInfoProvider
    * @param operations        the pools which could potentially be in the excluded state.
    */
   private static void save(String excludedPoolsFile,
-      Map<String, PoolOperation> operations) {
+      Map<String, PoolScanOperation> operations) {
     File current = new File(excludedPoolsFile);
     try {
       java.nio.file.Files.deleteIfExists(current.toPath());
@@ -245,44 +212,6 @@ public class PoolOperationMap extends RunnableModule implements CellInfoProvider
       LOGGER.error("Unrecoverable error during save of excluded pools file: {}",
           e.getMessage());
     }
-  }
-
-  public void saveExcluded() {
-    lock.lock();
-    try {
-      save(excludedPoolsFile, idle);
-    } finally {
-      lock.unlock();
-    }
-  }
-
-  /**
-   *  Called by the admin interface.
-   *  <p/>
-   *  Sets pool operation state to either included or excluded.  If the latter,
-   *  it will not be susceptible to pool scans or status change messages,
-   *  though it will continue to be checked for status when other pools are scanned.
-   *  The arrival of a new mode update will change the state but trigger nothing.
-   *
-   *  @param filter   used only with regular expression for pools.
-   *  @param included whether to include or not.
-   *  @return the number of pool operations which have been included or excluded.
-   */
-  public long setIncluded(PoolMatcher filter, boolean included) {
-    lock.lock();
-
-    Set<String> visited = new HashSet<>();
-
-    try {
-      update(filter, running, included, visited);
-      update(filter, waiting, included, visited);
-      update(filter, idle, included, visited);
-      condition.signalAll();
-    } finally {
-      lock.unlock();
-    }
-
-    return visited.size();
   }
 
   public void add(String pool) {
@@ -320,6 +249,23 @@ public class PoolOperationMap extends RunnableModule implements CellInfoProvider
     return cancelled;
   }
 
+  public String configSettings() {
+    return String.format("down grace period %s %s\n"
+            + "restart grace period %s %s\n"
+            + "maximum idle time before a running operation is canceled  %s %s\n"
+            + "maximum concurrent operations %s\n"
+            + "period set to %s %s\n\n",
+        downGracePeriod,
+        downGracePeriodUnit,
+        restartGracePeriod,
+        restartGracePeriodUnit,
+        maxRunningIdleTime,
+        maxRunningIdleTimeUnit,
+        maxConcurrentRunning,
+        timeout,
+        timeoutUnit);
+  }
+
   @VisibleForTesting
   public PoolQoSStatus getCurrentStatus(String pool) {
     /*
@@ -334,85 +280,55 @@ public class PoolOperationMap extends RunnableModule implements CellInfoProvider
     builder.append(configSettings());
     counters.appendRunning(builder);
     counters.appendSweep(builder);
+    builder.append("\n");
     counters.appendCounts(builder);
-    pw.print(builder.toString());
-  }
-
-  public String configSettings() {
-    return String.format("down grace period %s %s\n"
-            + "restart grace period %s %s\n"
-            + "maximum concurrent operations %s\n"
-            + "scan window set to %s %s\n"
-            + "period set to %s %s\n\n",
-        downGracePeriod,
-        downGracePeriodUnit,
-        restartGracePeriod,
-        restartGracePeriodUnit,
-        maxConcurrentRunning,
-        watchdog.rescanWindow,
-        watchdog.rescanWindowUnit,
-        timeout,
-        timeoutUnit);
+    pw.print(builder);
   }
 
   public int getDownGracePeriod() {
     return downGracePeriod;
   }
 
-  public void setDownGracePeriod(int downGracePeriod) {
-    this.downGracePeriod = downGracePeriod;
-  }
-
   public TimeUnit getDownGracePeriodUnit() {
     return downGracePeriodUnit;
-  }
-
-  public void setDownGracePeriodUnit(TimeUnit downGracePeriodUnit) {
-    this.downGracePeriodUnit = downGracePeriodUnit;
   }
 
   public int getMaxConcurrentRunning() {
     return maxConcurrentRunning;
   }
 
-  public void setMaxConcurrentRunning(int maxConcurrentRunning) {
-    this.maxConcurrentRunning = maxConcurrentRunning;
+  public int getMaxRunningIdleTime() {
+    return maxRunningIdleTime;
+  }
+
+  public TimeUnit getMaxRunningIdleTimeUnit() {
+    return maxRunningIdleTimeUnit;
   }
 
   public int getRestartGracePeriod() {
     return restartGracePeriod;
   }
 
-  public void setRestartGracePeriod(int restartGracePeriod) {
-    this.restartGracePeriod = restartGracePeriod;
-  }
-
   public TimeUnit getRestartGracePeriodUnit() {
     return restartGracePeriodUnit;
   }
 
-  public void setRestartGracePeriodUnit(TimeUnit restartGracePeriodUnit) {
-    this.restartGracePeriodUnit = restartGracePeriodUnit;
-  }
-
-  public int getScanWindow() {
-    return watchdog.rescanWindow;
-  }
-
-  public TimeUnit getScanWindowUnit() {
-    return watchdog.rescanWindowUnit;
-  }
-
   public String getState(String pool) {
-    PoolOperation operation = get(pool);
+    PoolScanOperation operation = get(pool);
     if (operation == null) {
       return null;
     }
     return operation.state.name();
   }
 
-  public boolean isWatchdogOn() {
-    return watchdog.running;
+  public void handlePoolStatusChange(String pool, PoolQoSStatus status) {
+    if (status != PoolQoSStatus.UNINITIALIZED) {
+      updateStatus(pool, status);
+    }
+  }
+
+  public boolean isInitialized(PoolV2Mode mode) {
+    return PoolQoSStatus.valueOf(mode) != PoolQoSStatus.UNINITIALIZED;
   }
 
   /**
@@ -420,7 +336,7 @@ public class PoolOperationMap extends RunnableModule implements CellInfoProvider
    */
   public String list(PoolMatcher filter) {
     StringBuilder builder = new StringBuilder();
-    TreeMap<String, PoolOperation>[] tmp = new TreeMap[]{new TreeMap(),
+    TreeMap<String, PoolScanOperation>[] tmp = new TreeMap[]{new TreeMap(),
         new TreeMap<>(),
         new TreeMap<>()};
     lock.lock();
@@ -443,10 +359,10 @@ public class PoolOperationMap extends RunnableModule implements CellInfoProvider
 
     int total = 0;
 
-    for (TreeMap<String, PoolOperation> map : tmp) {
-      for (Entry<String, PoolOperation> entry : map.entrySet()) {
+    for (TreeMap<String, PoolScanOperation> map : tmp) {
+      for (Entry<String, PoolScanOperation> entry : map.entrySet()) {
         String key = entry.getKey();
-        PoolOperation op = entry.getValue();
+        PoolScanOperation op = entry.getValue();
         if (filter.matches(key, op)) {
           builder.append(key).append("\t").append(op).append("\n");
           ++total;
@@ -512,14 +428,6 @@ public class PoolOperationMap extends RunnableModule implements CellInfoProvider
       LOGGER.info("Adding pools.");
       pools.stream().forEach(this::addPool);
 
-      /*
-       *  Placeholder for pool-less scan for online custodial files that have
-       *  lost all their replicas.
-       */
-      addPool(QoSMessageType.CHECK_CUSTODIAL_ONLINE.name());
-      PoolOperation operation = get(QoSMessageType.CHECK_CUSTODIAL_ONLINE.name());
-      operation.currStatus = PoolQoSStatus.ENABLED;
-      operation.lastStatus = PoolQoSStatus.ENABLED;
     } finally {
       lock.unlock();
     }
@@ -552,55 +460,18 @@ public class PoolOperationMap extends RunnableModule implements CellInfoProvider
     }
   }
 
-  public void reset() {
-    watchdog.resetInterrupt = true;
-    threadInterrupt();
+  public void runScans() {
+    scanWaiting();
+    scanRunning();
   }
 
-  @Override
-  public void run() {
-    while (!Thread.interrupted()) {
-      long start = System.currentTimeMillis();
-      lock.lock();
-      try {
-        condition.await(timeout, timeoutUnit);
-      } catch (InterruptedException e) {
-        if (watchdog.resetInterrupt) {
-          LOGGER.trace("Pool watchdog reset, returning to wait: timeout {} {}.", timeout,
-              timeoutUnit);
-          watchdog.resetInterrupt = false;
-          continue;
-        }
-        if (!watchdog.runInterrupt) {
-          LOGGER.trace("Pool watchdog wait was interrupted; exiting.");
-          break;
-        }
-        watchdog.runInterrupt = false;
-      } finally {
-        lock.unlock();
-      }
-
-      if (Thread.interrupted()) {
-        break;
-      }
-
-      LOGGER.trace("Pool watchdog initiating scan.");
-      scan();
-      LOGGER.trace("Pool watchdog scan completed.");
-
-      long end = System.currentTimeMillis();
-      counters.recordSweep(end, end - start);
+  public void saveExcluded() {
+    lock.lock();
+    try {
+      save(excludedPoolsFile, idle);
+    } finally {
+      lock.unlock();
     }
-
-    LOGGER.info("Exiting pool operation consumer.");
-    clear();
-
-    LOGGER.info("Pool operation queues cleared.");
-  }
-
-  public void runNow() {
-    watchdog.runInterrupt = true;
-    threadInterrupt();
   }
 
   public boolean scan(String pool, String addedTo, String removedFrom,
@@ -620,6 +491,7 @@ public class PoolOperationMap extends RunnableModule implements CellInfoProvider
    *  As in the auxiliary method called, WAITING operations have their
    *  forceScan flag set to true, but are not promoted to RUNNING here.
    *  <p/>
+   *  Also checks to see if the
    *  See documentation at {@link #doScan}.
    */
   public PoolScanReply scan(PoolFilter filter) {
@@ -628,7 +500,7 @@ public class PoolOperationMap extends RunnableModule implements CellInfoProvider
     try {
       Set<String> pools = getMappedPools();
       for (String pool : pools) {
-        PoolOperation operation = null;
+        PoolScanOperation operation = null;
         if (waiting.containsKey(pool)) {
           operation = waiting.get(pool);
         } else if (idle.containsKey(pool)) {
@@ -646,7 +518,8 @@ public class PoolOperationMap extends RunnableModule implements CellInfoProvider
             if (selectionPool != null) {
               mode = currentPsu.getPool(pool).getPoolMode();
             }
-            if (doScan(pool, null, null, null, mode, true)) {
+            if (doScan(pool, null, null,
+                null, mode, true)) {
               reply.addPool(pool, Optional.empty());
             }
           } catch (IllegalArgumentException e) {
@@ -660,20 +533,8 @@ public class PoolOperationMap extends RunnableModule implements CellInfoProvider
     }
   }
 
-  public void setExcludedPoolsFile(String excludedPoolsFile) {
-    this.excludedPoolsFile = excludedPoolsFile;
-  }
-
-  public void setHandler(PoolOpHandler handler) {
-    this.handler = handler;
-  }
-
-  public void setInitializationGracePeriod(long initializationGracePeriod) {
-    this.initializationGracePeriod = initializationGracePeriod;
-  }
-
-  public void setInitializationGracePeriodUnit(TimeUnit initializationGracePeriodUnit) {
-    this.initializationGracePeriodUnit = initializationGracePeriodUnit;
+  public void setCounters(QoSScannerCounters counters) {
+    this.counters = counters;
   }
 
   public void setCurrentPsu(PoolSelectionUnit currentPsu) {
@@ -685,30 +546,81 @@ public class PoolOperationMap extends RunnableModule implements CellInfoProvider
     }
   }
 
-  public void setCounters(QoSScannerCounters counters) {
-    this.counters = counters;
+  public void setExcludedPoolsFile(String excludedPoolsFile) {
+    this.excludedPoolsFile = excludedPoolsFile;
   }
 
-  public void setRescanWindow(int rescanWindow) {
-    watchdog.rescanWindow = rescanWindow;
+  public void setHandler(PoolOpHandler handler) {
+    this.handler = handler;
   }
 
-  public void setRescanWindowUnit(TimeUnit rescanWindowUnit) {
-    watchdog.rescanWindowUnit = rescanWindowUnit;
-  }
+  /**
+   *  Called by the admin interface.
+   *  <p/>
+   *  Sets pool operation state to either included or excluded.  If the latter,
+   *  it will not be susceptible to pool scans or status change messages,
+   *  though it will continue to be checked for status when other pools are scanned.
+   *  The arrival of a new mode update will change the state but trigger nothing.
+   *
+   *  @param filter   used only with regular expression for pools.
+   *  @param included whether to include or not.
+   *  @return the number of pool operations which have been included or excluded.
+   */
+  public long setIncluded(PoolMatcher filter, boolean included) {
+    lock.lock();
 
-  public void setWatchdog(boolean on) {
-    watchdog.running = on;
-  }
+    Set<String> visited = new HashSet<>();
 
-  public boolean isInitialized(PoolV2Mode mode) {
-    return PoolQoSStatus.valueOf(mode) != PoolQoSStatus.UNINITIALIZED;
-  }
-
-  public void handlePoolStatusChange(String pool, PoolQoSStatus status) {
-    if (status != PoolQoSStatus.UNINITIALIZED) {
-      updateStatus(pool, status);
+    try {
+      update(filter, running, included, visited);
+      update(filter, waiting, included, visited);
+      update(filter, idle, included, visited);
+      condition.signalAll();
+    } finally {
+      lock.unlock();
     }
+
+    return visited.size();
+  }
+
+  public void setInitializationGracePeriod(long initializationGracePeriod) {
+    this.initializationGracePeriod = initializationGracePeriod;
+  }
+
+  public void setInitializationGracePeriodUnit(TimeUnit initializationGracePeriodUnit) {
+    this.initializationGracePeriodUnit = initializationGracePeriodUnit;
+  }
+
+  public void setDownGracePeriod(int downGracePeriod) {
+    this.downGracePeriod = downGracePeriod;
+  }
+
+  public void setDownGracePeriodUnit(TimeUnit downGracePeriodUnit) {
+    this.downGracePeriodUnit = downGracePeriodUnit;
+  }
+
+  public void setMaxConcurrentRunning(int maxConcurrentRunning) {
+    this.maxConcurrentRunning = maxConcurrentRunning;
+  }
+
+  public void setMaxRunningIdleTime(int maxRunningIdleTime) {
+    this.maxRunningIdleTime = maxRunningIdleTime;
+  }
+
+  public void setMaxRunningIdleTimeUnit(TimeUnit maxRunningIdleTimeUnit) {
+    this.maxRunningIdleTimeUnit = maxRunningIdleTimeUnit;
+  }
+
+  public void setRestartGracePeriod(int restartGracePeriod) {
+    this.restartGracePeriod = restartGracePeriod;
+  }
+
+  public void setRestartGracePeriodUnit(TimeUnit restartGracePeriodUnit) {
+    this.restartGracePeriodUnit = restartGracePeriodUnit;
+  }
+
+  public void setSysOpMap(SystemScanOperationMap sysOpMap) {
+    this.sysOpMap = sysOpMap;
   }
 
   /**
@@ -719,8 +631,8 @@ public class PoolOperationMap extends RunnableModule implements CellInfoProvider
     LOGGER.trace("updateStatus for {}: {}.", pool, status);
     lock.lock();
     try {
-      Map<String, PoolOperation> queue = running;
-      PoolOperation operation = queue.get(pool);
+      Map<String, PoolScanOperation> queue = running;
+      PoolScanOperation operation = queue.get(pool);
 
       if (operation == null) {
         queue = waiting;
@@ -765,6 +677,7 @@ public class PoolOperationMap extends RunnableModule implements CellInfoProvider
           operation.resetChildren();
           operation.resetFailed();
           operation.lastUpdate = System.currentTimeMillis();
+          operation.lastScan = System.currentTimeMillis();
           operation.state = State.WAITING;
           operation.exception = null;
           operation.task = null;
@@ -777,15 +690,11 @@ public class PoolOperationMap extends RunnableModule implements CellInfoProvider
     }
   }
 
-  public void update(String pool, int children) {
-    update(pool, children, null);
-  }
-
   public void update(String pool, boolean failed) {
     LOGGER.debug("Parent {}, child operation has completed.", pool);
     lock.lock();
     try {
-      PoolOperation operation = get(pool);
+      PoolScanOperation operation = get(pool);
       operation.incrementCompleted(failed);
       if (operation.isComplete()) {
         terminate(pool, operation);
@@ -796,11 +705,15 @@ public class PoolOperationMap extends RunnableModule implements CellInfoProvider
     }
   }
 
-  public void update(String pool, int children, CacheException exception) {
+  public void update(String pool, long children) {
+    update(pool, children, null);
+  }
+
+  public void update(String pool, long children, CacheException exception) {
     LOGGER.debug("Pool {}, operation update, children {}.", pool, children);
     lock.lock();
     try {
-      PoolOperation operation = get(pool);
+      PoolScanOperation operation = get(pool);
       operation.exception = exception;
       operation.setChildren(children);
       operation.lastUpdate = System.currentTimeMillis();
@@ -814,12 +727,19 @@ public class PoolOperationMap extends RunnableModule implements CellInfoProvider
     }
   }
 
-  @VisibleForTesting
-  public void scan() {
-    scanIdle();
-    scanWaiting();
+  protected void clear() {
+    lock.lock();
+
+    try {
+      running.clear();
+      waiting.clear();
+      idle.clear();
+    } finally {
+      lock.unlock();
+    }
   }
 
+  @GuardedBy("lock")
   private void addPool(String pool) {
     /*
      *  Idempotency.  Should not fail.
@@ -831,14 +751,15 @@ public class PoolOperationMap extends RunnableModule implements CellInfoProvider
     }
 
     idle.put(pool,
-             new PoolOperation(initializationGracePeriodUnit.toMillis(initializationGracePeriod)));
+             new PoolScanOperation(initializationGracePeriodUnit.toMillis(initializationGracePeriod)));
   }
 
-  private long cancel(Map<String, PoolOperation> queue, PoolMatcher filter) {
+  @GuardedBy("lock")
+  private long cancel(Map<String, PoolScanOperation> queue, PoolMatcher filter) {
     AtomicLong canceled = new AtomicLong(0);
 
     ImmutableSet.copyOf(queue.keySet()).stream().forEach((k) -> {
-      PoolOperation operation = queue.get(k);
+      PoolScanOperation operation = queue.get(k);
       if (filter.matches(k, operation)) {
         cancel(k, operation, queue);
         canceled.incrementAndGet();
@@ -848,7 +769,8 @@ public class PoolOperationMap extends RunnableModule implements CellInfoProvider
     return canceled.get();
   }
 
-  private void cancel(String pool, PoolOperation operation, Map<String, PoolOperation> queue) {
+  @GuardedBy("lock")
+  private void cancel(String pool, PoolScanOperation operation, Map<String, PoolScanOperation> queue) {
     if (operation.task != null) {
       operation.task.cancel("qos admin command");
       operation.task = null;
@@ -860,18 +782,6 @@ public class PoolOperationMap extends RunnableModule implements CellInfoProvider
     operation.state = State.CANCELED;
     reset(pool, operation);
     handler.handlePoolScanCancelled(pool, operation.currStatus);
-  }
-
-  private void clear() {
-    lock.lock();
-
-    try {
-      running.clear();
-      waiting.clear();
-      idle.clear();
-    } finally {
-      lock.unlock();
-    }
   }
 
   private PoolSelectionUnit currentPsu() {
@@ -899,6 +809,7 @@ public class PoolOperationMap extends RunnableModule implements CellInfoProvider
    *                          not be scanned under any circumstances until it is included.
    *  @return true only if operation has been promoted from idle to waiting.
    */
+  @GuardedBy("lock")
   private boolean doScan(String pool,
                          String addedTo,
                          String removedFrom,
@@ -914,7 +825,7 @@ public class PoolOperationMap extends RunnableModule implements CellInfoProvider
       return false;
     }
 
-    PoolOperation operation;
+    PoolScanOperation operation;
 
     if (waiting.containsKey(pool)) {
       LOGGER.debug("Scan of {} is already in waiting state, setting its "
@@ -952,14 +863,9 @@ public class PoolOperationMap extends RunnableModule implements CellInfoProvider
       }
     }
 
-    if (pool.equals(QoSMessageType.CHECK_CUSTODIAL_ONLINE.name())) {
-      operation.currStatus = PoolQoSStatus.ENABLED;
-    } else {
-      operation.getNextAction(PoolQoSStatus.valueOf(mode));
-      operation.group = addedTo != null ? addedTo : removedFrom;
-      operation.unit = storageUnit;
-    }
-
+    operation.getNextAction(PoolQoSStatus.valueOf(mode));
+    operation.group = addedTo != null ? addedTo : removedFrom;
+    operation.unit = storageUnit;
     operation.forceScan = true;
     operation.lastUpdate = System.currentTimeMillis();
     operation.state = State.WAITING;
@@ -973,8 +879,9 @@ public class PoolOperationMap extends RunnableModule implements CellInfoProvider
   /**
    *  @return operation, or <code>null</code> if not mapped.
    */
-  private PoolOperation get(String pool) {
-    PoolOperation operation = running.get(pool);
+  @GuardedBy("lock")
+  private PoolScanOperation get(String pool) {
+    PoolScanOperation operation = running.get(pool);
 
     if (operation == null) {
       operation = waiting.get(pool);
@@ -987,14 +894,14 @@ public class PoolOperationMap extends RunnableModule implements CellInfoProvider
     return operation;
   }
 
-  private void reset(String pool, PoolOperation operation) {
+  @GuardedBy("lock")
+  private void reset(String pool, PoolScanOperation operation) {
     operation.lastUpdate = System.currentTimeMillis();
     operation.group = null;
     operation.unit = null;
     operation.forceScan = false;
     operation.resetChildren();
-    if (pool.equals(QoSMessageType.CHECK_CUSTODIAL_ONLINE.name())
-        || currentPsu().getPool(pool) != null) {
+    if (currentPsu().getPool(pool) != null) {
       idle.put(pool, operation);
     } else if (operation.state == State.FAILED || operation.failedChildren() > 0) {
       String message = operation.exception == null ? "" : "exception: " +
@@ -1006,64 +913,6 @@ public class PoolOperationMap extends RunnableModule implements CellInfoProvider
     }
   }
 
-  /**
-   *  Handles the periodic scan/watchdog function.
-   *  The scan uses the implicit temporal ordering of puts to the linked hash
-   *  map to find all expired pools (they will be at the head of the
-   *  list maintained by the map).
-   */
-  private void scanIdle() {
-    lock.lock();
-    try {
-      long now = System.currentTimeMillis();
-      long expiry = watchdog.getExpiry();
-
-      for (Iterator<Entry<String, PoolOperation>> i
-          = idle.entrySet().iterator(); i.hasNext(); ) {
-        Entry<String, PoolOperation> entry = i.next();
-        String pool = entry.getKey();
-        PoolOperation operation = entry.getValue();
-
-        if (operation.state == State.EXCLUDED) {
-          continue;
-        }
-
-        if (operation.currStatus == PoolQoSStatus.UNINITIALIZED) {
-          continue;
-        }
-
-        if (operation.lastStatus == PoolQoSStatus.DOWN &&
-            operation.currStatus == PoolQoSStatus.DOWN) {
-          /*
-           *  When a scan completes or the operation is reset,
-           *  the lastStatus is set to the current status.
-           *  If both of these are DOWN, then the pool has
-           *  not changed state since the last scan.  We avoid
-           *  rescanning DOWN pools that have already been scanned.
-           */
-          continue;
-        }
-
-        if (now - operation.lastScan >= expiry) {
-          i.remove();
-          operation.forceScan = true;
-          operation.state = State.WAITING;
-          operation.resetFailed();
-          operation.exception = null;
-          waiting.put(pool, operation);
-        } else {
-          /**
-           * time-ordering invariant guarantees there are
-           * no more candidates at this point
-           */
-          break;
-        }
-      }
-    } finally {
-      lock.unlock();
-    }
-  }
-
   private void scanWaiting() {
     lock.lock();
     try {
@@ -1071,10 +920,10 @@ public class PoolOperationMap extends RunnableModule implements CellInfoProvider
       long downExpiry = downGracePeriodUnit.toMillis(downGracePeriod);
       long restartExpiry = restartGracePeriodUnit.toMillis(restartGracePeriod);
 
-      for (Iterator<Entry<String, PoolOperation>> i = waiting.entrySet().iterator(); i.hasNext(); ) {
-        Entry<String, PoolOperation> entry = i.next();
+      for (Iterator<Entry<String, PoolScanOperation>> i = waiting.entrySet().iterator(); i.hasNext(); ) {
+        Entry<String, PoolScanOperation> entry = i.next();
         String pool = entry.getKey();
-        PoolOperation operation = entry.getValue();
+        PoolScanOperation operation = entry.getValue();
         long expiry;
 
         switch (operation.currStatus) {
@@ -1106,11 +955,44 @@ public class PoolOperationMap extends RunnableModule implements CellInfoProvider
     }
   }
 
-  private void submit(String pool, PoolOperation operation) {
-    QoSMessageType type = pool.equals(QoSMessageType.CHECK_CUSTODIAL_ONLINE.name()) ?
-        QoSMessageType.CHECK_CUSTODIAL_ONLINE : operation.currStatus.toMessageType();
-    operation.task = new PoolScanTask(pool, type, operation.group,
-                                      operation.unit, operation.forceScan, handler);
+  private void scanRunning() {
+    lock.lock();
+    try {
+      long now = System.currentTimeMillis();
+      long maxIdle = maxRunningIdleTimeUnit.toMillis(maxRunningIdleTime);
+      List<Entry<String, PoolScanOperation>> toCancel = new ArrayList<>();
+
+      running.entrySet().forEach(entry -> {
+        String pool = entry.getKey();
+        PoolScanOperation operation = entry.getValue();
+        if (now - maxIdle >= operation.lastUpdate) {
+          LOGGER.warn("pool scan operation for {} was last updated more than {} {} ago; cancelling.",
+              pool, maxRunningIdleTime, maxRunningIdleTimeUnit);
+          toCancel.add(entry);
+        }
+      });
+
+      toCancel.forEach(entry ->cancel(entry.getKey(), entry.getValue(), running));
+
+      /**
+       *  The policy is to prioritize pool change operations over system background.
+       *  Only when there are no pool operations in progress do we resume background scan
+       *  activity.
+       */
+      sysOpMap.setPaused(!running.isEmpty());
+    } finally {
+      lock.unlock();
+    }
+  }
+
+  @GuardedBy("lock")
+  private void submit(String pool, PoolScanOperation operation) {
+    operation.task = new PoolScanTask(pool,
+                                      operation.currStatus.toMessageType(),
+                                      operation.group,
+                                      operation.unit,
+                                      operation.forceScan,
+                                      handler);
     operation.state = State.RUNNING;
     operation.lastUpdate = System.currentTimeMillis();
     operation.lastStatus = operation.currStatus;
@@ -1120,7 +1002,8 @@ public class PoolOperationMap extends RunnableModule implements CellInfoProvider
     operation.task.submit();
   }
 
-  private void terminate(String pool, PoolOperation operation) {
+  @GuardedBy("lock")
+  private void terminate(String pool, PoolScanOperation operation) {
     LOGGER.debug("terminate, pool {}, {}.", pool, operation);
 
     if (operation.exception != null) {
@@ -1144,13 +1027,14 @@ public class PoolOperationMap extends RunnableModule implements CellInfoProvider
     reset(pool, operation);
   }
 
+  @GuardedBy("lock")
   private void update(PoolMatcher filter,
-                      Map<String, PoolOperation> queue,
+                      Map<String, PoolScanOperation> queue,
                       boolean include,
                       Set<String> visited) {
     ImmutableSet.copyOf(queue.keySet()).stream().forEach((k) -> {
       if (!visited.contains(k)) {
-        PoolOperation operation = queue.get(k);
+        PoolScanOperation operation = queue.get(k);
         if (filter.matches(k, operation)) {
           if (!include) {
             if (operation.task != null) {

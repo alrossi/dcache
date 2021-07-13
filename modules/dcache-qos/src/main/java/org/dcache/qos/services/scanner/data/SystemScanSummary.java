@@ -57,19 +57,40 @@ export control laws.  Anyone downloading information from this server is
 obligated to secure any necessary Government licenses before exporting
 documents or software obtained from this server.
  */
-package org.dcache.qos.vehicles;
+package org.dcache.qos.services.scanner.data;
 
-import diskCacheV111.vehicles.Message;
+/**
+ * Simple struct to use during pool scan; shared between handlers, task and namespace access.
+ */
+public final class SystemScanSummary extends ScanSummary {
+  private static final long serialVersionUID = 6858909928975785983L;
 
-public class QoSScannerVerificationCancelledMessage extends Message {
+  private final long from;
+  private final long to;
+  private final boolean full;
 
-  private final String id;
+  private long lastIndex;
 
-  public QoSScannerVerificationCancelledMessage(String id) {
-    this.id = id;
+  public SystemScanSummary(String id, long from, long to, boolean full) {
+    super(id);
+    this.from = from;
+    this.to = to;
+    this.full = full;
   }
 
-  public String getPool() {
-    return id;
+  public long getFrom() {
+    return from;
   }
+
+  public long getTo() { return to; }
+
+  public synchronized long getLastIndex() {
+    return lastIndex;
+  }
+
+  public synchronized void setLastIndex(long lastIndex) {
+    this.lastIndex = lastIndex;
+  }
+
+  public synchronized boolean isFullScan() { return full; }
 }
