@@ -67,7 +67,7 @@ package org.dcache.qos.data;
  *   <tr><td>COPY_REPLICA<td></td>the file needs another replica</td></tr>
  *   <tr><td>CACHE_REPLICA<td></td>the file has an excess copy</td></tr>
  *   <tr><td>PERSIST_REPLICA<td></td>the file needs a replica, but has a cached one it can convert</td></tr>
- *   <tr><td>UNSET_PRECIOUS_REPLICA<td></td>the file has a precious replica which is no longer needs to be precious</td></tr>
+ *   <tr><td>UNSET_PRECIOUS_REPLICA<td></td>the file has a precious replica which no longer needs to be precious</td></tr>
  *   <tr><td>WAIT_FOR_STAGE<td></td>the file has no accessible replicas, but can be staged</td></tr>
  *   <tr><td>FLUSH<td></td>the file has disk replicas but needs to go to tape</td></tr>
  *   <tr><td>NOTIFY_MISSING<td></td>the file has no known locations</td></tr>
@@ -81,7 +81,7 @@ public enum QoSAction {
   COPY_REPLICA,               // the file needs another replica
   CACHE_REPLICA,              // the file has an excess copy
   PERSIST_REPLICA,            // the file needs a replica, but has a cached one it can convert
-  UNSET_PRECIOUS_REPLICA,     // the file has a precious replica which is no longer needs to be precious
+  UNSET_PRECIOUS_REPLICA,     // the file has a precious replica which no longer needs to be precious
   WAIT_FOR_STAGE,             // the file has no accessible replicas, but can be staged
   FLUSH,                      // the file has disk replicas but needs to go to tape
   NOTIFY_MISSING,             // the file has no known locations
