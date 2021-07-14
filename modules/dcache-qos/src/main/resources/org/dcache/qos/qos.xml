@@ -71,8 +71,8 @@
 
   <bean id="message-backlog-handler" class="org.dcache.qos.util.SerializingBacklogHandler"
     init-method="initialize" destroy-method="shutdown">
-    <constructor-arg value="${qos.home}/backlogged-messages"/>
     <description>Handles message backlog when receivers are temporarily unavailable.</description>
+    <constructor-arg value="${qos.home}/backlogged-messages"/>
     <property name="receivers">
       <set>
         <ref bean="requirements-receiver"/>
