@@ -141,7 +141,7 @@ public class PoolOperationMap extends ScanOperationMap {
   protected final Map<String, PoolScanOperation> waiting = new LinkedHashMap<>();
   protected final Map<String, PoolScanOperation> running = new HashMap<>();
 
-  private SystemScanOperationMap sysOpMap;
+  private SystemOperationMap sysOpMap;
   private PoolSelectionUnit currentPsu;
   private PoolOpHandler      handler;
 
@@ -619,7 +619,7 @@ public class PoolOperationMap extends ScanOperationMap {
     this.restartGracePeriodUnit = restartGracePeriodUnit;
   }
 
-  public void setSysOpMap(SystemScanOperationMap sysOpMap) {
+  public void setSysOpMap(SystemOperationMap sysOpMap) {
     this.sysOpMap = sysOpMap;
   }
 
@@ -973,13 +973,6 @@ public class PoolOperationMap extends ScanOperationMap {
       });
 
       toCancel.forEach(entry ->cancel(entry.getKey(), entry.getValue(), running));
-
-      /**
-       *  The policy is to prioritize pool change operations over system background.
-       *  Only when there are no pool operations in progress do we resume background scan
-       *  activity.
-       */
-      sysOpMap.setPaused(!running.isEmpty());
     } finally {
       lock.unlock();
     }

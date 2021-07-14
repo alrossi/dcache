@@ -89,23 +89,18 @@ import org.slf4j.LoggerFactory;
  *  Its default batch size is also lower than the ONLINE scans, to give the latter priority
  *  when running concurrently.
  *  <p/>
- *  If one or more pool scans are activated by a PoolMonitor change, the PoolOperationMap
- *  pauses background operations.  Operations currently in flight will complete, but
- *  no further operations will be launched until there are no more running pool operations.
- *  <p/>
  *  Provides methods for cancellation of running scans, and for
  *  ad hoc submission of a scan.
  *  <p/>
  *  Class is not marked final for stubbing/mocking purposes.
  */
-public class SystemScanOperationMap extends ScanOperationMap {
+public class SystemOperationMap extends ScanOperationMap {
 
-  private static final Logger LOGGER = LoggerFactory.getLogger(SystemScanOperationMap.class);
+  private static final Logger LOGGER = LoggerFactory.getLogger(SystemOperationMap.class);
 
   private static final String SCAN_DURATION
       = "\n\t%s days, %s hours, %s minutes, %s seconds\n\n";
 
-  private static final byte PAUSED = 0x1;
   private static final byte ONLINE = 0x2;
   private static final byte NEARLINE = 0x4;
 
@@ -133,7 +128,7 @@ public class SystemScanOperationMap extends ScanOperationMap {
   private SysOpHandler handler;
   private QoSScannerCounters counters;
 
-  public SystemScanOperationMap() {
+  public SystemOperationMap() {
     long now = System.currentTimeMillis();
     lastOnlineScanStart = now;
     lastOnlineScanEnd = now;
@@ -257,11 +252,6 @@ public class SystemScanOperationMap extends ScanOperationMap {
   public void runScans() {
     lock.lock();
     try {
-      if ((state & PAUSED) == PAUSED) {
-        LOGGER.info("runScans: background scans have been paused.");
-        return;
-      }
-
       long now = System.currentTimeMillis();
 
       if (nearlineScanEnabled && (state & NEARLINE) != NEARLINE &&
@@ -382,22 +372,6 @@ public class SystemScanOperationMap extends ScanOperationMap {
       online.clear();
       nearline.clear();
       history.clear();
-    } finally {
-      lock.unlock();
-    }
-  }
-
-  /*
-   *  Available only to the "friend" package PoolOperationMap instance.
-   */
-  void setPaused(boolean pause) {
-    lock.lock();
-    try {
-      if (pause) {
-        state |= PAUSED;
-      } else {
-        state &= (~PAUSED);
-      }
     } finally {
       lock.unlock();
     }
