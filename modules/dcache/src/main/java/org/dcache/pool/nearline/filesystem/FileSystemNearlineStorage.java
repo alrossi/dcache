@@ -145,7 +145,7 @@ public abstract class FileSystemNearlineStorage extends AbstractBlockingNearline
         value = properties.get("stage-delay-unit");
         stageDelayUnit = value == null ? SECONDS : TimeUnit.valueOf(value.toUpperCase());
         value = properties.get("stage-delay-per");
-        stageDelayPer = ByteUnit.valueOf(value);
+        stageDelayPer = value == null ? KiB : ByteUnit.valueOf(value);
     }
 
     @Override
