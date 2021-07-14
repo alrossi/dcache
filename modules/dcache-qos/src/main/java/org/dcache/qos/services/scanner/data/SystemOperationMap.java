@@ -101,19 +101,13 @@ public class SystemOperationMap extends ScanOperationMap {
   private static final String SCAN_DURATION
       = "\n\t%s days, %s hours, %s minutes, %s seconds\n\n";
 
-<<<<<<< HEAD
   private static final byte ONLINE = 0x1;
   private static final byte NEARLINE = 0x2;
-=======
-  private static final byte ONLINE = 0x2;
-  private static final byte NEARLINE = 0x4;
->>>>>>> 32f7fc6554 (this should have gone in)
 
   private final Map<String, SystemScanOperation> online = new HashMap<>();
   private final Map<String, SystemScanOperation> nearline = new HashMap<>();
   private final EvictingQueue<String> history = EvictingQueue.create(100);
 
-<<<<<<< HEAD
   private byte state;
 
   private Integer onlineRescanWindow;
@@ -125,19 +119,6 @@ public class SystemOperationMap extends ScanOperationMap {
 
   private int nearlineBatchSize = 200000;
   private int onlineBatchSize = 500000;
-=======
-  private volatile byte state;
-
-  private volatile Integer onlineRescanWindow;
-  private volatile TimeUnit onlineRescanWindowUnit;
-
-  private volatile Integer nearlineRescanWindow;
-  private volatile TimeUnit nearlineRescanWindowUnit;
-  private volatile boolean nearlineScanEnabled = false;
-
-  private volatile int nearlineBatchSize = 200000;
-  private volatile int onlineBatchSize = 500000;
->>>>>>> 32f7fc6554 (this should have gone in)
 
   private  long lastOnlineScanStart;
   private  long lastOnlineScanEnd;
