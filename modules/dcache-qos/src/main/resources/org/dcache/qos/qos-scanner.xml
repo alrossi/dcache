@@ -37,7 +37,7 @@
 
   <!-- ******************************************* SHARED ******************************************* -->
 
-  <bean id="BacklogHandler" class="org.dcache.qos.util.SerializingBacklogHandler"
+  <bean id="message-backlog-handler" class="org.dcache.qos.util.SerializingBacklogHandler"
     init-method="initialize" destroy-method="shutdown">
     <description>Handles message backlog when receivers are temporarily unavailable.</description>
     <constructor-arg value="${qos.home}/backlogged-messages"/>
