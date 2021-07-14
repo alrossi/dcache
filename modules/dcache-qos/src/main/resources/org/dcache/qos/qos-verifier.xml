@@ -239,8 +239,8 @@
   </bean>
 
   <bean id="verify-history" class="org.dcache.qos.util.QoSHistory" init-method="initialize">
-    <property name="capacity" value="${qos.limits.verifier.operation-history}"/>
     <description>Circular buffer for holding the status of the most recently completed operations.</description>
+    <property name="capacity" value="${qos.limits.verifier.operation-history}"/>
   </bean>
 
   <bean id="pool-info-change-handler"
