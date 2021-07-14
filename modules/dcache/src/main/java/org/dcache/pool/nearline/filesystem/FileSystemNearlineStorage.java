@@ -45,7 +45,7 @@ import org.dcache.vehicles.FileAttributes;
 import static com.google.common.base.Preconditions.checkArgument;
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.dcache.util.ByteUnit.BYTES;
-import static org.dcache.util.ByteUnit.KiB;
+import static org.dcache.util.ByteUnit.MiB;
 
 public abstract class FileSystemNearlineStorage extends AbstractBlockingNearlineStorage
 {
@@ -53,7 +53,7 @@ public abstract class FileSystemNearlineStorage extends AbstractBlockingNearline
     private Path directory;
     private long stageDelay = 0L;
     private TimeUnit stageDelayUnit = SECONDS;
-    private ByteUnit stageDelayPer = KiB;
+    private ByteUnit stageDelayPer = MiB;
 
     public FileSystemNearlineStorage(String type, String name)
     {
@@ -145,7 +145,7 @@ public abstract class FileSystemNearlineStorage extends AbstractBlockingNearline
         value = properties.get("stage-delay-unit");
         stageDelayUnit = value == null ? SECONDS : TimeUnit.valueOf(value.toUpperCase());
         value = properties.get("stage-delay-per");
-        stageDelayPer = value == null ? KiB : ByteUnit.valueOf(value);
+        stageDelayPer = value == null ? MiB : ByteUnit.valueOf(value);
     }
 
     @Override
