@@ -91,7 +91,7 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import org.dcache.qos.services.scanner.data.PoolFilter;
 import org.dcache.qos.services.scanner.data.PoolOperationMap;
-import org.dcache.qos.services.scanner.data.SystemScanOperationMap;
+import org.dcache.qos.services.scanner.data.SystemOperationMap;
 import org.dcache.qos.services.scanner.namespace.NamespaceAccess;
 import org.dcache.qos.services.scanner.util.QoSScannerCounters;
 import org.dcache.qos.util.ExceptionMessage;
@@ -771,16 +771,16 @@ public final class QoSScannerAdmin implements CellCommandListener {
     @Override
     protected String doCall() {
       if (id != null) {
-        systemScanOperationMap.cancelSystemScan(id);
+        systemOperationMap.cancelSystemScan(id);
       } else {
         if (nearline) {
-          systemScanOperationMap.cancelAll(true);
+          systemOperationMap.cancelAll(true);
         }
         if (online) {
-          systemScanOperationMap.cancelAll(false);
+          systemOperationMap.cancelAll(false);
         }
       }
-      return systemScanOperationMap.getSystemScanStatus();
+      return systemOperationMap.getSystemScanStatus();
     }
   }
 
@@ -802,10 +802,10 @@ public final class QoSScannerAdmin implements CellCommandListener {
     @Override
     protected String doCall() {
       if (history) {
-        return order == ASC ? systemScanOperationMap.historyAscending() :
-            systemScanOperationMap.historyDescending();
+        return order == ASC ? systemOperationMap.historyAscending() :
+            systemOperationMap.historyDescending();
       }
-      return systemScanOperationMap.getSystemScanStatus();
+      return systemOperationMap.getSystemScanStatus();
     }
   }
 
@@ -854,35 +854,35 @@ public final class QoSScannerAdmin implements CellCommandListener {
     @Override
     protected String doCall() {
       if (enableNearline != null) {
-        systemScanOperationMap.setNearlineRescanEnabled(enableNearline);
+        systemOperationMap.setNearlineRescanEnabled(enableNearline);
       }
 
       if (nearlineBatch != null) {
-        systemScanOperationMap.setNearlineBatchSize(nearlineBatch);
+        systemOperationMap.setNearlineBatchSize(nearlineBatch);
       }
 
       if (onlineBatch != null) {
-        systemScanOperationMap.setOnlineBatchSize(onlineBatch);
+        systemOperationMap.setOnlineBatchSize(onlineBatch);
       }
 
       if (maxOperations != null) {
-        systemScanOperationMap.setMaxConcurrentRunning(maxOperations);
+        systemOperationMap.setMaxConcurrentRunning(maxOperations);
       }
 
       if (nearlineWindow != null) {
-        systemScanOperationMap.setNearlineRescanWindow(nearlineWindow);
+        systemOperationMap.setNearlineRescanWindow(nearlineWindow);
         if (unit != null) {
-          systemScanOperationMap.setNearlineRescanWindowUnit(unit);
+          systemOperationMap.setNearlineRescanWindowUnit(unit);
         }
       } else if (onlineWindow != null) {
-        systemScanOperationMap.setOnlineRescanWindow(onlineWindow);
+        systemOperationMap.setOnlineRescanWindow(onlineWindow);
         if (unit != null) {
-          systemScanOperationMap.setOnlineRescanWindowUnit(unit);
+          systemOperationMap.setOnlineRescanWindowUnit(unit);
         }
       }
 
-      systemScanOperationMap.reset();
-      return  systemScanOperationMap.configSettings();
+      systemOperationMap.reset();
+      return  systemOperationMap.configSettings();
     }
   }
 
@@ -910,11 +910,11 @@ public final class QoSScannerAdmin implements CellCommandListener {
     protected String doCall() {
       try {
         if (nearline) {
-          systemScanOperationMap.startScan(true);
+          systemOperationMap.startScan(true);
         }
 
         if (online) {
-          systemScanOperationMap.startScan(false);
+          systemOperationMap.startScan(false);
         }
 
         if (!nearline && !online) {
@@ -923,7 +923,7 @@ public final class QoSScannerAdmin implements CellCommandListener {
       } catch (PermissionDeniedCacheException e) {
         return e.toString();
       }
-      systemScanOperationMap.runNow();
+      systemOperationMap.runNow();
       return "Scan started.";
     }
   }
@@ -938,7 +938,7 @@ public final class QoSScannerAdmin implements CellCommandListener {
   private MessageGuard messageGuard;
   private MapInitializer initializer;
   private PoolOperationMap poolOperationMap;
-  private SystemScanOperationMap systemScanOperationMap;
+  private SystemOperationMap systemOperationMap;
   private QoSScannerCounters counters;
   private NamespaceAccess namespaceAccess;
   private String dataDir;
@@ -972,8 +972,8 @@ public final class QoSScannerAdmin implements CellCommandListener {
     this.poolOperationMap = poolOperationMap;
   }
 
-  public void setSystemScanOperationMap(SystemScanOperationMap systemScanOperationMap) {
-    this.systemScanOperationMap = systemScanOperationMap;
+  public void setSystemScanOperationMap(SystemOperationMap systemOperationMap) {
+    this.systemOperationMap = systemOperationMap;
   }
 
   private void handleAsync(String fileName,

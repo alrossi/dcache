@@ -60,14 +60,14 @@ documents or software obtained from this server.
 package org.dcache.qos.services.scanner.handlers;
 
 import diskCacheV111.util.CacheException;
-import org.dcache.qos.services.scanner.data.SystemScanOperationMap;
+import org.dcache.qos.services.scanner.data.SystemOperationMap;
 import org.dcache.qos.services.scanner.data.SystemScanSummary;
 
 /**
  * Implements the handling of system scan task termination via pass-through to the operation map.
  */
 public final class SysTaskCompletionHandler {
-  private SystemScanOperationMap map;
+  private SystemOperationMap map;
 
   public void childTerminated(String id) {
     map.update(id, false);
@@ -77,7 +77,7 @@ public final class SysTaskCompletionHandler {
     map.update(id, true);
   }
 
-  public void setMap(SystemScanOperationMap map) {
+  public void setMap(SystemOperationMap map) {
     this.map = map;
   }
 
