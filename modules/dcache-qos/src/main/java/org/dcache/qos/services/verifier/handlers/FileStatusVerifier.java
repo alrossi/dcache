@@ -92,8 +92,7 @@ import static org.dcache.qos.services.verifier.data.PoolInfoMap.SYSTEM_PGROUP;
 /**
  *  This is the parent class for the logic engine which verifies replica requirements.
  *  <p/>
- *  The two principal methods check whether an update requires action (#isActionable),
- *  and whether a standing operation requires (further) action (#verify).
+ *  The principal method checks whether a standing operation requires (further) action (#verify).
  *  <p/>
  *  Specific implementations are required to provide a way for selecting new locations,
  *  and a way for determining which locations can be cached.
