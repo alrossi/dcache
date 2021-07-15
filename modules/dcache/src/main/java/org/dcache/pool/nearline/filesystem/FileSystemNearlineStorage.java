@@ -112,12 +112,10 @@ public abstract class FileSystemNearlineStorage extends AbstractBlockingNearline
         long millis = computeSimulatedDelayInMillis(request.getFileAttributes());
 
         if (millis > 0) {
-            synchronized (this) {
-                try {
-                    wait(millis);
-                } catch (InterruptedException e) {
-                    // ignore
-                }
+            try {
+                Thread.sleep(millis);
+            } catch (InterruptedException e) {
+                // ignore
             }
         }
 
