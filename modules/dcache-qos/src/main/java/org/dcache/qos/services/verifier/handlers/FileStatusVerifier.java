@@ -70,6 +70,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
 import org.dcache.cells.CellStub;
 import org.dcache.qos.data.FileQoSRequirements;
 import org.dcache.qos.data.QoSAction;
@@ -687,6 +688,10 @@ public abstract class FileStatusVerifier {
     /*
      *  Find all pools that are backed by an HSM which would be eligible as a flush
      *  target for this file.
+     *
+     *  If the storage info has no URIs for location, an attempt is made to match
+     *  against the storage type.  Otherwise, the storage instances for the
+     *  list of URIs is used.
      */
     private Set<String> findHsmLocations(VerifyOperation operation,
                                          FileQoSRequirements requirements,
@@ -696,7 +701,18 @@ public abstract class FileStatusVerifier {
             return hsmLocations;
         }
 
-        Set<String> hsms = ImmutableSet.of(requirements.getAttributes().getHsm());
+        /*
+         *  Storage info should be present in the attributes.
+         */
+        List<URI> storageLocations = requirements.getAttributes().getStorageInfo().locations();
+        Set<String> hsms;
+
+        if (storageLocations.isEmpty()) {
+            hsms = ImmutableSet.of(requirements.getAttributes().getHsm());
+        } else {
+            hsms = storageLocations.stream().map(URI::getAuthority).collect(Collectors.toSet());
+        }
+
         String unit = operation.getStorageUnit();
 
         LOGGER.debug("{}, checking for potential HSM locations (storage unit {}, hsms {}).",
