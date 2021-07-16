@@ -239,6 +239,19 @@ public abstract class FileStatusVerifier {
     private Optional<QoSAction> checkForFlush(FileQoSRequirements requirements,
                                               VerifiedLocations locations,
                                               VerifyOperation operation) {
+        switch (operation.getMessageType()) {
+            case CORRUPT_FILE:
+            case ADD_CACHE_LOCATION:
+                /*
+                 *  Do not try to interfere with the flushing of a file that is new
+                 *  or a file reported as broken.  Not taking action on the first
+                 *  is imperative as the tape URI may not yet be set and determining
+                 *  available HSM pools is based on the tape instance part (the authority)
+                 *  of the URI.
+                 */
+                return Optional.empty();
+        }
+
         int required = requirements.getRequiredTape();
         int current = locations.getCurrentTapeLocations().size();
         int missingTapeLocations = required - current;
